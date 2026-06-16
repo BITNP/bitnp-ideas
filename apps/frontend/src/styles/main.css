@@ -1,5 +1,17 @@
 :root {
   color-scheme: light dark;
+  --ideas-color-background: #f6f7f9;
+  --ideas-color-surface: #ffffff;
+  --ideas-color-login-bg: #f7f4ef;
+  --ideas-color-login-bg-rgb: 247, 244, 239;
+  --ideas-color-text: #201a16;
+  --ideas-color-text-strong: #231914;
+  --ideas-color-text-card: #251a15;
+  --ideas-color-text-muted: #5f5148;
+  --ideas-color-text-soft: #6f5542;
+  --ideas-color-ink-rgb: 32, 26, 22;
+  --ideas-color-paper-rgb: 255, 253, 249;
+  --ideas-color-shadow-rgb: 91, 54, 21;
 }
 
 html {
@@ -9,7 +21,7 @@ html {
 body {
   margin: 0;
   min-width: 320px;
-  background: #f6f7f9;
+  background: var(--ideas-color-background);
 }
 
 .page-shell {
@@ -49,20 +61,20 @@ body {
   grid-template-columns: repeat(24, 34px);
   align-items: center;
   min-height: 48px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(var(--ideas-color-ink-rgb), 0.08);
 }
 
 .gantt-bar {
   height: 26px;
   border-radius: 6px;
-  background: #da751d;
+  background: rgb(var(--v-theme-primary));
   position: relative;
   overflow: hidden;
 }
 
 .gantt-progress {
   height: 100%;
-  background: rgba(255, 255, 255, 0.34);
+  background: rgba(var(--ideas-color-paper-rgb), 0.34);
 }
 
 @media (max-width: 960px) {

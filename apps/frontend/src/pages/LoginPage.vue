@@ -50,56 +50,59 @@ async function startLogin() {
 
 <template>
   <div class="login-shell">
-    <section class="brand-stage" aria-label="BITNP IDEAS">
-      <div class="brand-mark">
-        <img src="/assets/bitnp-logo.svg" alt="BITNP" />
-      </div>
+    <div class="login-container">
+      <section class="brand-stage" aria-label="BITNP IDEAS">
+        <div class="brand-copy">
+          <p class="eyebrow">BITNP IDEAS</p>
+          <h1>
+            <span class="brand-title-main">
+              <span class="brand-accent">I</span>dea-<span class="brand-accent">D</span>riven
+              <span class="brand-accent">E</span>xecution
+            </span>
+            <small class="brand-title-sub">
+              <span class="brand-accent">A</span>dministration <span class="brand-accent">S</span>ystem
+            </small>
+          </h1>
+          <p class="lead">
+            A focused workspace for collecting signals, shaping projects, and moving work through delivery.
+          </p>
+        </div>
+      </section>
 
-      <div class="brand-copy">
-        <p class="eyebrow">BITNP IDEAS</p>
-        <h1>
-          <span>Idea-Driven Execution</span>
-          <small>Administration System</small>
-        </h1>
-        <p class="lead">
-          A focused workspace for collecting signals, shaping projects, and moving work through delivery.
-        </p>
-      </div>
-    </section>
+      <section class="login-panel" aria-label="Sign in">
+        <div class="panel-inner">
+          <div class="panel-heading">
+            <img src="/assets/bitnp-logo.svg" alt="">
+            <div>
+              <p>Welcome back</p>
+              <h2>Sign in to BITNP IDEAS</h2>
+            </div>
+          </div>
 
-    <section class="login-panel" aria-label="Sign in">
-      <div class="panel-inner">
-        <div class="panel-heading">
-          <img src="/assets/bitnp-logo.svg" alt="" />
-          <div>
-            <p>Welcome back</p>
-            <h2>Sign in to BITNP IDEAS</h2>
+          <v-alert v-if="error" type="error" variant="tonal" closable class="mb-5">
+            {{ error }}
+          </v-alert>
+
+          <v-btn
+            block
+            color="primary"
+            size="x-large"
+            prepend-icon="$account"
+            class="login-button"
+            :loading="loading"
+            :disabled="loading"
+            @click="startLogin"
+          >
+            {{ isCallback ? 'Connecting to BITNP SSO' : 'Sign in with BITNP SSO' }}
+          </v-btn>
+
+          <div class="trust-line">
+            <span />
+            <p>BITNP unified identity</p>
           </div>
         </div>
-
-        <v-alert v-if="error" type="error" variant="tonal" closable class="mb-5">
-          {{ error }}
-        </v-alert>
-
-        <v-btn
-          block
-          color="primary"
-          size="x-large"
-          prepend-icon="$account"
-          class="login-button"
-          :loading="loading"
-          :disabled="loading"
-          @click="startLogin"
-        >
-          {{ isCallback ? 'Connecting to BITNP SSO' : 'Sign in with BITNP SSO' }}
-        </v-btn>
-
-        <div class="trust-line">
-          <span></span>
-          <p>BITNP unified identity</p>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -107,22 +110,34 @@ async function startLogin() {
 .login-shell {
   position: relative;
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 500px);
+  min-height: 100dvh;
   overflow: hidden;
   background:
-    linear-gradient(rgba(32, 26, 22, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(32, 26, 22, 0.06) 1px, transparent 1px),
-    linear-gradient(135deg, rgba(218, 117, 29, 0.14), rgba(22, 124, 128, 0.08) 42%, rgba(246, 247, 249, 0)),
-    #f7f4ef;
+    linear-gradient(rgba(var(--ideas-color-ink-rgb), 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--ideas-color-ink-rgb), 0.06) 1px, transparent 1px),
+    linear-gradient(
+      135deg,
+      rgba(var(--v-theme-primary), 0.14),
+      rgba(var(--v-theme-secondary), 0.08) 42%,
+      rgba(var(--ideas-color-login-bg-rgb), 0)
+    ),
+    var(--ideas-color-login-bg);
   background-size: 44px 44px, 44px 44px, auto, auto;
-  color: #201a16;
+  color: var(--ideas-color-text);
+}
+
+.login-container {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(440px, 560px);
+  max-width: 1380px;
+  margin: 0 auto;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .brand-stage {
   position: relative;
   display: flex;
-  min-height: 100vh;
   flex-direction: column;
   justify-content: center;
   gap: 36px;
@@ -130,25 +145,11 @@ async function startLogin() {
   z-index: 1;
 }
 
-.brand-mark,
 .brand-copy {
   position: relative;
   z-index: 1;
 }
 
-.brand-mark {
-  display: inline-flex;
-  width: 92px;
-  height: 92px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(32, 26, 22, 0.1);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: 0 24px 70px rgba(91, 54, 21, 0.14);
-}
-
-.brand-mark img,
 .panel-heading img {
   display: block;
   width: 64px;
@@ -164,8 +165,8 @@ async function startLogin() {
 .panel-heading p,
 .trust-line p {
   margin: 0;
-  color: #6f5542;
-  font-size: 0.78rem;
+  color: var(--ideas-color-text-soft);
+  font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -174,20 +175,25 @@ async function startLogin() {
 .brand-copy h1 {
   max-width: 740px;
   margin: 18px 0;
-  color: #231914;
-  font-size: 5.2rem;
+  color: var(--ideas-color-text-strong);
+  font-size: 5rem;
   font-weight: 800;
   line-height: 0.98;
   letter-spacing: 0;
 }
 
-.brand-copy h1 span,
-.brand-copy h1 small {
+.brand-title-main,
+.brand-title-sub {
   display: block;
 }
 
-.brand-copy h1 small {
+.brand-accent {
+  color: rgb(var(--v-theme-primary));
+}
+
+.brand-title-sub {
   margin-top: 12px;
+  color: var(--ideas-color-text-soft);
   font-size: 0.42em;
   font-weight: 700;
   line-height: 1.05;
@@ -196,9 +202,9 @@ async function startLogin() {
 .lead {
   max-width: 580px;
   margin: 0;
-  color: #5f5148;
-  font-size: 1.08rem;
-  line-height: 1.75;
+  color: var(--ideas-color-text-muted);
+  font-size: 1.05rem;
+  line-height: 1.7;
 }
 
 .login-panel {
@@ -207,31 +213,31 @@ async function startLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px;
+  padding: 32px 48px;
   background: transparent;
 }
 
 .login-panel::before {
   position: absolute;
   top: 50%;
-  left: -190px;
-  width: 440px;
-  height: 440px;
+  left: clamp(-240px, -18vw, -140px);
+  width: clamp(280px, 40vw, 480px);
+  height: clamp(280px, 40vw, 480px);
   content: "";
-  border: 1px solid rgba(218, 117, 29, 0.24);
+  border: 1px solid rgba(var(--v-theme-primary), 0.24);
   pointer-events: none;
   transform: translateY(-34%) rotate(14deg);
 }
 
 .panel-inner {
   width: 100%;
-  max-width: 420px;
-  padding: clamp(28px, 4vw, 44px);
-  border: 1px solid rgba(32, 26, 22, 0.12);
+  max-width: 520px;
+  padding: 36px;
+  border: 1px solid rgba(var(--ideas-color-ink-rgb), 0.12);
   border-radius: 8px;
-  background: rgba(255, 253, 249, 0.82);
+  background: rgba(var(--ideas-color-paper-rgb), 0.82);
   backdrop-filter: blur(18px);
-  box-shadow: 0 30px 80px rgba(91, 54, 21, 0.16);
+  box-shadow: 0 30px 80px rgba(var(--ideas-color-shadow-rgb), 0.16);
 }
 
 .panel-heading {
@@ -243,8 +249,8 @@ async function startLogin() {
 
 .panel-heading h2 {
   margin: 4px 0 0;
-  color: #251a15;
-  font-size: 1.7rem;
+  color: var(--ideas-color-text-card);
+  font-size: 1.75rem;
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: 0;
@@ -266,34 +272,40 @@ async function startLogin() {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #167c80;
+  background: rgb(var(--v-theme-secondary));
 }
 
 @media (max-width: 900px) {
-  .login-shell {
+  .login-container {
     grid-template-columns: 1fr;
+    max-width: 540px;
+    min-height: 100vh;
+    min-height: 100dvh;
+    align-content: center;
   }
 
   .brand-stage {
-    min-height: auto;
-    gap: 28px;
-    padding-bottom: 12px;
+    justify-content: flex-end;
+    gap: 16px;
+    padding: 24px 16px 10px;
   }
 
   .brand-copy h1 {
-    font-size: 3.7rem;
+    font-size: 4rem;
   }
 
   .login-panel {
-    padding: 0 18px 32px;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 8px 16px 24px;
   }
 
   .login-panel::before {
-    top: -100px;
+    top: -80px;
     left: auto;
-    right: -80px;
-    width: 320px;
-    height: 320px;
+    right: clamp(-120px, -10vw, -60px);
+    width: clamp(240px, 38vw, 360px);
+    height: clamp(240px, 38vw, 360px);
     transform: rotate(14deg);
   }
 
@@ -304,49 +316,44 @@ async function startLogin() {
 
 @media (max-width: 560px) {
   .brand-stage {
-    gap: 20px;
-    padding: 24px 18px 16px;
+    gap: 14px;
+    padding: 20px 16px 10px;
   }
 
-  .brand-mark {
-    width: 78px;
-    height: 78px;
-    border-radius: 18px;
-  }
-
-  .brand-mark img,
   .panel-heading img {
-    width: 54px;
-    height: 54px;
+    width: 52px;
+    height: 52px;
   }
 
   .brand-copy h1 {
-    font-size: 2.6rem;
+    font-size: 2.9rem;
   }
 
-  .brand-copy h1 small {
+  .brand-title-sub {
     margin-top: 10px;
-    font-size: 0.46em;
+    font-size: 0.45em;
   }
 
   .lead {
-    font-size: 0.98rem;
+    font-size: 0.96rem;
     line-height: 1.6;
   }
 
   .login-panel {
-    padding: 0 14px 22px;
+    padding: 10px 16px 20px;
   }
 
   .login-panel::before {
-    top: -76px;
-    right: -92px;
-    width: 240px;
-    height: 240px;
+    top: -60px;
+    right: clamp(-100px, -12vw, -60px);
+    width: clamp(180px, 34vw, 260px);
+    height: clamp(180px, 34vw, 260px);
   }
 
   .panel-heading {
     align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 24px;
   }
 }
 </style>
