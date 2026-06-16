@@ -149,8 +149,6 @@ async function handleSaveSettings() {
 
 <template>
   <div class="page-shell">
-    <v-progress-linear v-if="loading" indeterminate color="primary" />
-
     <v-alert v-if="error" type="error" class="mb-4" closable @click:close="error = null">
       {{ error }}
     </v-alert>

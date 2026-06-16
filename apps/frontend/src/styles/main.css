@@ -55,7 +55,7 @@ body {
 .gantt-bar {
   height: 26px;
   border-radius: 6px;
-  background: #1d4f91;
+  background: #da751d;
   position: relative;
   overflow: hidden;
 }
@@ -76,4 +76,3 @@ body {
     grid-template-columns: 1fr;
   }
 }
-

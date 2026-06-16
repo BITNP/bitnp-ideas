@@ -11,4 +11,4 @@ htmlcov/
 alembic/versions/*.py
 !alembic/versions/.gitkeep
 
-*.yaml
+config.yaml

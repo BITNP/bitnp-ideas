@@ -31,48 +31,63 @@ async function handleLogout() {
 
 <template>
   <v-app>
-    <v-navigation-drawer v-model="drawer" width="268">
-      <div class="pa-4">
-        <div class="text-h6 font-weight-bold">BITNP IDEAS</div>
-        <div class="text-caption text-medium-emphasis">Idea-Driven Execution</div>
-      </div>
+    <!-- Full-screen blank layout (login page) — no chrome -->
+    <template v-if="route.meta.layout === 'blank'">
+      <v-main>
+        <router-view />
+      </v-main>
+    </template>
 
-      <v-list nav density="compact">
-        <v-list-item
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
-          :prepend-icon="item.icon"
-          :title="item.title"
-          rounded="lg"
-        />
-      </v-list>
-    </v-navigation-drawer>
+    <!-- Default layout with sidebar + app bar -->
+    <template v-else-if="auth.ready">
+      <v-navigation-drawer v-model="drawer" width="268">
+        <div class="pa-4">
+          <div class="text-h6 font-weight-bold">BITNP IDEAS</div>
+          <div class="text-caption text-medium-emphasis">Idea-Driven Execution</div>
+        </div>
 
-    <v-app-bar flat border>
-      <v-app-bar-nav-icon @click="drawer = !drawer" />
-      <v-toolbar-title>{{ title }}</v-toolbar-title>
-      <v-spacer />
-      <v-btn :icon="isDark ? '$sun' : '$moon'" variant="text" @click="toggleTheme" />
-
-      <v-menu v-if="auth.isAuthenticated">
-        <template #activator="{ props: menuProps }">
-          <v-btn
-            icon="$account"
-            variant="text"
-            v-bind="menuProps"
+        <v-list nav density="compact">
+          <v-list-item
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            :prepend-icon="item.icon"
+            :title="item.title"
+            rounded="lg"
           />
-        </template>
-        <v-list density="compact">
-          <v-list-item :title="auth.user?.display_name ?? ''" :subtitle="auth.user?.email ?? ''" />
-          <v-divider />
-          <v-list-item title="Sign out" @click="handleLogout" />
         </v-list>
-      </v-menu>
-    </v-app-bar>
+      </v-navigation-drawer>
 
-    <v-main>
-      <router-view />
-    </v-main>
+      <v-app-bar flat border>
+        <v-app-bar-nav-icon @click="drawer = !drawer" />
+        <v-toolbar-title>{{ title }}</v-toolbar-title>
+        <v-spacer />
+        <v-btn :icon="isDark ? '$sun' : '$moon'" variant="text" @click="toggleTheme" />
+
+        <v-menu v-if="auth.isAuthenticated">
+          <template #activator="{ props: menuProps }">
+            <v-btn
+              icon="$account"
+              variant="text"
+              v-bind="menuProps"
+            />
+          </template>
+          <v-list density="compact">
+            <v-list-item :title="auth.user?.display_name ?? ''" :subtitle="auth.user?.email ?? ''" />
+            <v-divider />
+            <v-list-item title="Sign out" @click="handleLogout" />
+          </v-list>
+        </v-menu>
+      </v-app-bar>
+
+      <v-main>
+        <router-view />
+      </v-main>
+    </template>
+
+    <!-- Loading state while restoring session -->
+    <div v-else class="d-flex align-center justify-center h-screen">
+      <v-progress-circular indeterminate color="primary" size="48" />
+    </div>
   </v-app>
 </template>

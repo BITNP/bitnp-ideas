@@ -20,4 +20,5 @@ apps/frontend/.vite/
 apps/backend/.venv/
 
 
-.sysyphus/
+.sisyphus/
+config.yaml

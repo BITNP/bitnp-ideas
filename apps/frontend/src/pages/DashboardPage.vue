@@ -102,8 +102,6 @@ onMounted(async () => {
 
 <template>
   <div class="page-shell">
-    <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-0" />
-
     <v-alert
       v-if="error"
       type="error"

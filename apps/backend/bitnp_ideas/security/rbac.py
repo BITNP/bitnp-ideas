@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -27,14 +28,16 @@ class AuthContext:
         return self.api_key is not None
 
 
-def create_session_token(user: User) -> str:
+async def create_session_token(user: User) -> str:
     payload = {
         "sub": user.id,
         "email": user.email,
         "name": user.display_name,
         "role": user.global_role,
     }
-    return jwt.encode(payload, settings.security.session_secret_key, algorithm="HS256")
+    return await asyncio.to_thread(
+        jwt.encode, payload, settings.security.session_secret_key, algorithm="HS256"
+    )
 
 
 async def _user_from_bearer_token(
@@ -47,7 +50,8 @@ async def _user_from_bearer_token(
         return None
 
     try:
-        payload = jwt.decode(
+        payload = await asyncio.to_thread(
+            jwt.decode,
             credentials.credentials,
             settings.security.session_secret_key,
             algorithms=["HS256"],

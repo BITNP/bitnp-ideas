@@ -79,9 +79,8 @@ async def callback(
         user.updated_at = utcnow()
 
     await session.commit()
-    await session.refresh(user)
     return {
-        "access_token": create_session_token(user),
+        "access_token": await create_session_token(user),
         "token_type": "bearer",
         "user": CurrentUser.model_validate(user),
     }
