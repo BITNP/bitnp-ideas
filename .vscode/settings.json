@@ -1,5 +1,6 @@
 {
   "typescript.tsdk": "apps/frontend/node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
-  "vue.server.hybridMode": false
+  "vue.server.hybridMode": false,
+  "typescript.tsserver.maxTsServerMemory": 4096
 }
