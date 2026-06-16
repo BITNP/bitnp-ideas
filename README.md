@@ -16,6 +16,14 @@ uv sync
 uv run uvicorn bitnp_ideas.main:app --reload
 ```
 
+Backend runtime configuration is loaded from [apps/backend/config.yaml](apps/backend/config.yaml). The local database URL is:
+
+```text
+postgres://bitnp_ideas:bitnp_ideas@127.0.0.1/bitnp_ideas
+```
+
+Invalid or incomplete backend configuration fails startup immediately; the backend does not silently replace bad YAML values with code defaults.
+
 In another shell:
 
 ```bash
@@ -32,6 +40,8 @@ docker compose up --build
 ```
 
 The API runs on `http://localhost:8000`, and the frontend runs on `http://localhost:8080`.
+
+Docker uses [apps/backend/config.docker.yaml](apps/backend/config.docker.yaml), selected with `BITNP_IDEAS_CONFIG`, so the backend container connects to the Compose `postgres` service while the normal local config remains pointed at `127.0.0.1`.
 
 ## Database Migrations
 

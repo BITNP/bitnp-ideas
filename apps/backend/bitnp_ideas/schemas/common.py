@@ -3,7 +3,17 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from bitnp_ideas.models.enums import GlobalRole, IdeaStatus, Priority, ProjectStatus, TaskStatus
+from bitnp_ideas.models.enums import (
+    DependencyType,
+    EntityType,
+    ExternalLinkType,
+    GlobalRole,
+    IdeaStatus,
+    Priority,
+    ProjectIdeaRelation,
+    ProjectStatus,
+    TaskStatus,
+)
 
 
 class ApiMessage(BaseModel):
@@ -22,6 +32,8 @@ class EntityRef(BaseModel):
 
 
 class CurrentUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     email: str
     display_name: str
@@ -64,6 +76,14 @@ class IdeaCreate(BaseModel):
     tag_names: list[str] = Field(default_factory=list)
 
 
+class IdeaUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=240)
+    description: str | None = None
+    priority: Priority | None = None
+    linked_project_id: str | None = None
+    linked_project_url: str | None = None
+
+
 class IdeaStatusUpdate(BaseModel):
     status: IdeaStatus
     note: str | None = None
@@ -71,7 +91,40 @@ class IdeaStatusUpdate(BaseModel):
     linked_project_url: str | None = None
 
 
+class IdeaTagCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    color: str | None = Field(default=None, max_length=16)
+    description: str | None = None
+
+
+class IdeaTagUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    color: str | None = Field(default=None, max_length=16)
+    description: str | None = None
+    is_active: bool | None = None
+
+
+class IdeaTagAttach(BaseModel):
+    tag_ids: list[str] = Field(min_length=1)
+
+
+class IdeaStatusHistoryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    idea_id: str
+    from_status: str | None = None
+    to_status: str
+    actor_id: str | None = None
+    note: str | None = None
+    linked_project_id: str | None = None
+    linked_project_url: str | None = None
+    created_at: datetime
+
+
 class ProjectRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     key: str
     name: str
@@ -91,7 +144,28 @@ class ProjectCreate(BaseModel):
     owner_id: str | None = None
 
 
+class ProjectUpdate(BaseModel):
+    key: str | None = Field(default=None, min_length=2, max_length=32)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    status: ProjectStatus | None = None
+    owner_id: str | None = None
+    start_date: date | None = None
+    target_end_date: date | None = None
+
+
+class ProjectMemberCreate(BaseModel):
+    user_id: str
+
+
+class ProjectIdeaLinkCreate(BaseModel):
+    idea_id: str
+    relation_type: ProjectIdeaRelation = ProjectIdeaRelation.RELATED
+
+
 class TaskRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     project_id: str
     title: str
@@ -112,11 +186,23 @@ class TaskCreate(BaseModel):
     end_date: date | None = None
 
 
+class TaskUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=240)
+    description: str | None = None
+    status: TaskStatus | None = None
+    assignee_id: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    progress: int | None = Field(default=None, ge=0, le=100)
+    parent_task_id: str | None = None
+    version: int | None = None
+
+
 class GanttDependency(BaseModel):
     id: str
     predecessor_task_id: str
     successor_task_id: str
-    dependency_type: str = "finish_to_start"
+    dependency_type: DependencyType = DependencyType.FINISH_TO_START
 
 
 class GanttRead(BaseModel):
@@ -138,7 +224,15 @@ class GanttBulkUpdate(BaseModel):
     changes: list[GanttBulkChange]
 
 
+class TaskDependencyCreate(BaseModel):
+    predecessor_task_id: str
+    successor_task_id: str
+    dependency_type: DependencyType = DependencyType.FINISH_TO_START
+
+
 class ApiKeyRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     key_id: str
@@ -154,6 +248,17 @@ class ApiKeyCreate(BaseModel):
     scopes: list[str] = Field(default_factory=lambda: ["ideas:read", "ideas:write"])
 
 
+class ApiKeyCreateResponse(BaseModel):
+    api_key: ApiKeyRead
+    secret: str
+
+
+class ApiKeyUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    is_active: bool | None = None
+    scopes: list[str] | None = None
+
+
 class ActivityRead(BaseModel):
     id: str
     project_id: str
@@ -167,15 +272,18 @@ class ActivityRead(BaseModel):
 
 
 class ExternalLinkRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
-    entity_type: str
+    entity_type: EntityType
     entity_id: str
     url: str
     title: str | None = None
-    link_type: str | None = None
+    link_type: ExternalLinkType | None = None
 
 
 class ExternalLinkCreate(BaseModel):
     url: str
     title: str | None = None
-    link_type: str | None = "website"
+    description: str | None = None
+    link_type: ExternalLinkType | None = ExternalLinkType.WEBSITE

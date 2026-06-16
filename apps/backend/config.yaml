@@ -1,0 +1,25 @@
+app:
+  name: BITNP IDEAS
+  version: 0.1.0
+  openapi_url: /openapi.json
+  docs_url: /docs
+
+server:
+  cors_origins:
+    - http://localhost:5173
+
+database:
+  url: postgres://bitnp_ideas:bitnp_ideas@127.0.0.1/bitnp_ideas
+
+security:
+  session_secret_key: bitnp-ideas-dev-session-secret
+  oidc:
+    enabled: false
+    issuer_url: https://login.bitnp.net/auth/realms/master
+    client_id: null
+    client_secret: null
+
+api_keys:
+  timestamp_tolerance_seconds: 300
+  allowed_entities:
+    - idea

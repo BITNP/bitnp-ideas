@@ -7,14 +7,15 @@ from bitnp_ideas.core.config import settings
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title=settings.app_name,
-        version="0.1.0",
-        openapi_url="/openapi.json",
+        title=settings.app.name,
+        version=settings.app.version,
+        openapi_url=settings.app.openapi_url,
+        docs_url=settings.app.docs_url,
     )
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=settings.server.cors_origin_strings,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -24,7 +25,7 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def root() -> dict[str, str]:
-        return {"service": settings.app_name, "docs": "/docs"}
+        return {"service": settings.app.name, "docs": settings.app.docs_url}
 
     return app
 

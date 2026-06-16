@@ -1716,6 +1716,30 @@ uv run alembic upgrade head
 uv run uvicorn bitnp_ideas.main:app
 ```
 
+### 17.2.0 Backend 配置文件
+
+后端运行配置统一写入 YAML 文件。
+
+默认本地配置文件：
+
+```text
+apps/backend/config.yaml
+```
+
+默认本地数据库配置：
+
+```yaml
+database:
+  url: postgres://bitnp_ideas:bitnp_ideas@127.0.0.1/bitnp_ideas
+```
+
+约定：
+
+- 后端代码不得为关键配置提供会覆盖错误输入的业务默认值。
+- YAML 缺字段、字段类型错误、URL scheme 不支持、OIDC 配置不完整、API Key 边界不符合第一版约束时，服务必须启动失败并直接退出。
+- 运行时可以通过 `BITNP_IDEAS_CONFIG` 指定另一个 YAML 文件路径，但配置内容仍必须来自 YAML。
+- 开发与部署可以使用不同 YAML 文件，例如 Docker Compose 使用 `apps/backend/config.docker.yaml` 连接 Compose 内部的 `postgres` 服务。
+
 ### 17.2.1 Migration 文件策略
 
 Alembic 迁移文件默认不提交到仓库。
