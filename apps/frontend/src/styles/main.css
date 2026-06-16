@@ -1,0 +1,79 @@
+:root {
+  color-scheme: light dark;
+}
+
+html {
+  overflow-y: auto;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f6f7f9;
+}
+
+.page-shell {
+  width: min(1480px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 20px 0 32px;
+}
+
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.8fr);
+  gap: 16px;
+}
+
+.gantt-grid {
+  display: grid;
+  grid-template-columns: 320px minmax(520px, 1fr);
+  overflow-x: auto;
+}
+
+.gantt-row {
+  display: grid;
+  grid-template-columns: repeat(24, 34px);
+  align-items: center;
+  min-height: 48px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.gantt-bar {
+  height: 26px;
+  border-radius: 6px;
+  background: #1d4f91;
+  position: relative;
+  overflow: hidden;
+}
+
+.gantt-progress {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.34);
+}
+
+@media (max-width: 960px) {
+  .page-shell {
+    width: min(100vw - 20px, 720px);
+    padding-top: 12px;
+  }
+
+  .metric-grid,
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

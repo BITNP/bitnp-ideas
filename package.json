@@ -1,0 +1,19 @@
+{
+  "name": "bitnp-ideas",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm --filter @bitnp-ideas/frontend dev",
+    "build": "pnpm --filter @bitnp-ideas/frontend build",
+    "lint": "pnpm --filter @bitnp-ideas/frontend lint",
+    "typecheck": "pnpm --filter @bitnp-ideas/frontend typecheck",
+    "commitlint": "commitlint --edit"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.2.0",
+    "@commitlint/config-conventional": "^20.2.0",
+    "prettier": "^3.7.4"
+  }
+}
+

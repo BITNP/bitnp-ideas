@@ -1,0 +1,7 @@
+{
+  "name": "@bitnp-ideas/commitlint-config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.cjs"
+}
+
