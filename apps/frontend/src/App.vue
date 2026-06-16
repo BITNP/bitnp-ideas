@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTheme } from 'vuetify'
-
-import { useWorkspaceStore } from '@/stores/workspace'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const theme = useTheme()
-const store = useWorkspaceStore()
-const drawer = ref(true)
+const auth = useAuthStore()
+const drawer = ref(window.innerWidth >= 960)
 
 const navItems = [
   { title: 'Dashboard', to: '/dashboard', icon: '$dashboard' },
@@ -16,7 +15,6 @@ const navItems = [
   { title: 'Projects', to: '/projects', icon: '$gantt' },
   { title: 'API Keys', to: '/api-keys', icon: '$key' },
   { title: 'Users', to: '/users', icon: '$users' },
-  { title: 'Settings', to: '/settings', icon: '$settings' },
 ]
 
 const title = computed(() => navItems.find((item) => route.path.startsWith(item.to))?.title ?? 'Dashboard')
@@ -26,7 +24,9 @@ function toggleTheme() {
   theme.global.name.value = isDark.value ? 'ideasLight' : 'ideasDark'
 }
 
-onMounted(() => store.attachTags())
+async function handleLogout() {
+  await auth.logout()
+}
 </script>
 
 <template>
@@ -54,7 +54,21 @@ onMounted(() => store.attachTags())
       <v-toolbar-title>{{ title }}</v-toolbar-title>
       <v-spacer />
       <v-btn :icon="isDark ? '$sun' : '$moon'" variant="text" @click="toggleTheme" />
-      <v-btn icon="$account" variant="text" to="/settings" />
+
+      <v-menu v-if="auth.isAuthenticated">
+        <template #activator="{ props: menuProps }">
+          <v-btn
+            icon="$account"
+            variant="text"
+            v-bind="menuProps"
+          />
+        </template>
+        <v-list density="compact">
+          <v-list-item :title="auth.user?.display_name ?? ''" :subtitle="auth.user?.email ?? ''" />
+          <v-divider />
+          <v-list-item title="Sign out" @click="handleLogout" />
+        </v-list>
+      </v-menu>
     </v-app-bar>
 
     <v-main>
@@ -62,4 +76,3 @@ onMounted(() => store.attachTags())
     </v-main>
   </v-app>
 </template>
-

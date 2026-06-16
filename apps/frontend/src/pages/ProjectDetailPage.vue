@@ -1,145 +1,353 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import GanttBoard from '@/components/GanttBoard.vue'
 import MetricTile from '@/components/MetricTile.vue'
-import { useWorkspaceStore } from '@/stores/workspace'
+import { projectsApi, tasksApi, ganttApi, activityApi, linksApi } from '@/api/modules'
+import type { ProjectRead, TaskRead, GanttRead, ActivityRead, IdeaRead, ExternalLinkRead } from '@/types/api'
 
 const route = useRoute()
-const store = useWorkspaceStore()
+const projectId = route.params.id as string
+
 const tab = ref(route.name === 'project-gantt' ? 'gantt' : route.name === 'project-activity' ? 'activity' : 'overview')
-const project = computed(() => store.projects.find((item) => item.id === route.params.id) ?? store.projects[0])
+
+const project = ref<ProjectRead | null>(null)
+const tasks = ref<TaskRead[]>([])
+const ganttData = ref<GanttRead | null>(null)
+const activities = ref<ActivityRead[]>([])
+const projectIdeas = ref<IdeaRead[]>([])
+const links = ref<ExternalLinkRead[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
+
+const openTaskCount = computed(() => tasks.value.filter((t) => t.status !== 'completed').length)
+
+const addTaskDialog = ref(false)
+const newTaskTitle = ref('')
+const newTaskDescription = ref('')
+const newTaskStatus = ref('todo')
+const newTaskAssignee = ref('')
+const newTaskStartDate = ref('')
+const newTaskEndDate = ref('')
+
+const settingsName = ref('')
+const settingsStatus = ref('')
+const settingsDescription = ref('')
+
+onMounted(async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const res = await projectsApi.get(projectId)
+    project.value = res.data
+    settingsName.value = res.data.name
+    settingsStatus.value = res.data.status
+    settingsDescription.value = res.data.description
+  } catch {
+    error.value = 'Failed to load project.'
+    loading.value = false
+    return
+  }
+
+  try {
+    const res = await tasksApi.list(projectId)
+    tasks.value = res.data
+  } catch {
+    // tasks are optional for overview display
+  }
+
+  loading.value = false
+
+  if (tab.value === 'gantt') {
+    try {
+      const res = await ganttApi.get(projectId)
+      ganttData.value = res.data
+    } catch { /* empty gantt */ }
+  } else if (tab.value === 'activity') {
+    fetchActivities()
+  } else if (tab.value === 'ideas') {
+    fetchIdeas()
+  } else if (tab.value === 'links') {
+    fetchLinks()
+  }
+})
+
+watch(tab, (newTab) => {
+  if (newTab === 'tasks' && tasks.value.length === 0) {
+    tasksApi.list(projectId).then((res) => { tasks.value = res.data }).catch(() => {})
+  } else if (newTab === 'gantt' && !ganttData.value) {
+    ganttApi.get(projectId).then((res) => { ganttData.value = res.data }).catch(() => {})
+  } else if (newTab === 'activity' && activities.value.length === 0) {
+    fetchActivities()
+  } else if (newTab === 'ideas' && projectIdeas.value.length === 0) {
+    fetchIdeas()
+  } else if (newTab === 'links' && links.value.length === 0) {
+    fetchLinks()
+  }
+})
+
+async function fetchActivities() {
+  try {
+    const res = await activityApi.list(projectId)
+    activities.value = res.data
+  } catch { /* empty */ }
+}
+
+async function fetchIdeas() {
+  try {
+    const res = await projectsApi.listIdeas(projectId)
+    projectIdeas.value = res.data
+  } catch { /* empty */ }
+}
+
+async function fetchLinks() {
+  try {
+    const res = await linksApi.list('projects', projectId)
+    links.value = res.data
+  } catch { /* empty */ }
+}
+
+async function handleAddTask() {
+  if (!newTaskTitle.value) return
+  try {
+    const res = await tasksApi.create(projectId, {
+      title: newTaskTitle.value,
+      description: newTaskDescription.value || undefined,
+      status: newTaskStatus.value,
+      assignee_id: newTaskAssignee.value || undefined,
+      start_date: newTaskStartDate.value || undefined,
+      end_date: newTaskEndDate.value || undefined,
+    })
+    tasks.value.push(res.data)
+    addTaskDialog.value = false
+    newTaskTitle.value = ''
+    newTaskDescription.value = ''
+    newTaskStatus.value = 'todo'
+    newTaskAssignee.value = ''
+    newTaskStartDate.value = ''
+    newTaskEndDate.value = ''
+  } catch {
+    error.value = 'Failed to create task.'
+  }
+}
+
+async function handleSaveSettings() {
+  if (!project.value) return
+  try {
+    const res = await projectsApi.update(projectId, {
+      name: settingsName.value,
+      status: settingsStatus.value,
+      description: settingsDescription.value,
+    })
+    project.value = res.data
+  } catch {
+    error.value = 'Failed to update project settings.'
+  }
+}
 </script>
 
 <template>
   <div class="page-shell">
-    <div class="toolbar-row mb-4">
-      <div>
-        <div class="text-caption text-medium-emphasis">{{ project.key }}</div>
-        <h1 class="text-h5 mb-1">{{ project.name }}</h1>
-      </div>
-      <v-btn color="primary" prepend-icon="$plus">Add task</v-btn>
-    </div>
+    <v-progress-linear v-if="loading" indeterminate color="primary" />
 
-    <v-tabs v-model="tab" class="mb-4">
-      <v-tab value="overview">Overview</v-tab>
-      <v-tab value="tasks">Tasks</v-tab>
-      <v-tab value="gantt">Gantt</v-tab>
-      <v-tab value="ideas">Ideas</v-tab>
-      <v-tab value="links">Links</v-tab>
-      <v-tab value="activity">Activity</v-tab>
-      <v-tab value="settings">Settings</v-tab>
-    </v-tabs>
+    <v-alert v-if="error" type="error" class="mb-4" closable @click:close="error = null">
+      {{ error }}
+    </v-alert>
 
-    <v-window v-model="tab">
-      <v-window-item value="overview">
-        <div class="metric-grid mb-4">
-          <MetricTile label="Progress" :value="`${project.progress}%`" icon="$check" tone="success" />
-          <MetricTile label="Members" :value="project.members.length" icon="$users" tone="secondary" />
-          <MetricTile label="Open tasks" :value="store.openTasks" icon="$calendar" tone="primary" />
-          <MetricTile label="Linked ideas" :value="1" icon="$idea" tone="accent" />
+    <template v-if="project">
+      <div class="toolbar-row mb-4">
+        <div>
+          <div class="text-caption text-medium-emphasis">{{ project.key }}</div>
+          <h1 class="text-h5 mb-1">{{ project.name }}</h1>
         </div>
-        <div class="content-grid">
-          <v-card border flat>
-            <v-card-title>Tasks</v-card-title>
+        <v-btn color="primary" prepend-icon="$plus" @click="addTaskDialog = true">Add task</v-btn>
+      </div>
+
+      <v-tabs v-model="tab" class="mb-4">
+        <v-tab value="overview">Overview</v-tab>
+        <v-tab value="tasks">Tasks</v-tab>
+        <v-tab value="gantt">Gantt</v-tab>
+        <v-tab value="ideas">Ideas</v-tab>
+        <v-tab value="links">Links</v-tab>
+        <v-tab value="activity">Activity</v-tab>
+        <v-tab value="settings">Settings</v-tab>
+      </v-tabs>
+
+      <v-window v-model="tab">
+        <v-window-item value="overview">
+          <div class="metric-grid mb-4">
+            <MetricTile label="Progress" :value="`${project.progress}%`" icon="$check" tone="success" />
+            <MetricTile label="Members" :value="project.members.length" icon="$users" tone="secondary" />
+            <MetricTile label="Open tasks" :value="openTaskCount" icon="$calendar" tone="primary" />
+            <MetricTile label="Linked ideas" :value="projectIdeas.length" icon="$idea" tone="accent" />
+          </div>
+          <div class="content-grid">
+            <v-card border flat>
+              <v-card-title>Tasks</v-card-title>
+              <v-list v-if="tasks.length" lines="two">
+                <v-list-item
+                  v-for="task in tasks"
+                  :key="task.id"
+                  :title="task.title"
+                  :subtitle="`${task.assignee?.name ?? '—'} · ${task.status}`"
+                  prepend-icon="$calendar"
+                />
+              </v-list>
+              <v-card-text v-else class="text-medium-emphasis">No tasks yet.</v-card-text>
+            </v-card>
+            <v-card border flat>
+              <v-card-title>Members</v-card-title>
+              <v-list v-if="project.members.length">
+                <v-list-item
+                  v-for="member in project.members"
+                  :key="member.id"
+                  :title="member.name"
+                  prepend-icon="$account"
+                />
+              </v-list>
+              <v-card-text v-else class="text-medium-emphasis">No members yet.</v-card-text>
+            </v-card>
+          </div>
+        </v-window-item>
+
+        <v-window-item value="tasks">
+          <v-card v-if="tasks.length" border flat>
+            <v-table>
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th>Assignee</th>
+                  <th>Status</th>
+                  <th>Progress</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="task in tasks" :key="task.id">
+                  <td>{{ task.title }}</td>
+                  <td>{{ task.assignee?.name ?? '—' }}</td>
+                  <td>{{ task.status }}</td>
+                  <td><v-slider :model-value="task.progress" hide-details density="compact" readonly /></td>
+                </tr>
+              </tbody>
+            </v-table>
+          </v-card>
+          <v-card v-else border flat>
+            <v-card-text class="text-medium-emphasis">No tasks yet.</v-card-text>
+          </v-card>
+        </v-window-item>
+
+        <v-window-item value="gantt">
+          <GanttBoard
+            v-if="ganttData"
+            :tasks="ganttData.tasks ?? []"
+            :dependencies="ganttData.dependencies ?? []"
+          />
+          <v-card v-else border flat>
+            <v-card-text class="text-medium-emphasis">No gantt data available.</v-card-text>
+          </v-card>
+        </v-window-item>
+
+        <v-window-item value="ideas">
+          <v-card v-if="projectIdeas.length" border flat>
             <v-list lines="two">
               <v-list-item
-                v-for="task in store.tasks"
-                :key="task.id"
-                :title="task.title"
-                :subtitle="`${task.assignee} · ${task.status}`"
-                prepend-icon="$calendar"
+                v-for="idea in projectIdeas"
+                :key="idea.id"
+                :title="idea.title"
+                :subtitle="idea.status"
+                prepend-icon="$idea"
               />
             </v-list>
           </v-card>
-          <v-card border flat>
-            <v-card-title>Members</v-card-title>
+          <v-card v-else border flat>
+            <v-card-text class="text-medium-emphasis">No linked ideas yet.</v-card-text>
+          </v-card>
+        </v-window-item>
+
+        <v-window-item value="links">
+          <v-card v-if="links.length" border flat>
             <v-list>
-              <v-list-item v-for="member in project.members" :key="member" :title="member" prepend-icon="$account" />
+              <v-list-item
+                v-for="link in links"
+                :key="link.id"
+                :title="link.title"
+                :subtitle="link.url"
+                prepend-icon="$link"
+                :href="link.url"
+                target="_blank"
+              />
             </v-list>
           </v-card>
-        </div>
-      </v-window-item>
+          <v-card v-else border flat>
+            <v-card-text class="text-medium-emphasis">No links yet.</v-card-text>
+          </v-card>
+        </v-window-item>
 
-      <v-window-item value="tasks">
-        <v-card border flat>
-          <v-table>
-            <thead>
-              <tr>
-                <th>Task</th>
-                <th>Assignee</th>
-                <th>Status</th>
-                <th>Progress</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="task in store.tasks" :key="task.id">
-                <td>{{ task.title }}</td>
-                <td>{{ task.assignee }}</td>
-                <td>{{ task.status }}</td>
-                <td><v-slider :model-value="task.progress" hide-details density="compact" /></td>
-              </tr>
-            </tbody>
-          </v-table>
-        </v-card>
-      </v-window-item>
+        <v-window-item value="activity">
+          <v-card v-if="activities.length" border flat>
+            <v-timeline side="end" density="compact">
+              <v-timeline-item
+                v-for="activity in activities"
+                :key="activity.id"
+                dot-color="primary"
+                size="small"
+              >
+                <div class="font-weight-medium">{{ activity.action_type }}</div>
+                <div class="text-body-2 text-medium-emphasis">
+                  {{ activity.actor?.name ?? 'System' }} · {{ new Date(activity.created_at).toLocaleString() }}
+                </div>
+              </v-timeline-item>
+            </v-timeline>
+          </v-card>
+          <v-card v-else border flat>
+            <v-card-text class="text-medium-emphasis">No activity yet.</v-card-text>
+          </v-card>
+        </v-window-item>
 
-      <v-window-item value="gantt">
-        <GanttBoard />
-      </v-window-item>
+        <v-window-item value="settings">
+          <v-card border flat>
+            <v-card-title>Project settings</v-card-title>
+            <v-card-text>
+              <v-text-field v-model="settingsName" label="Project name" />
+              <v-select
+                v-model="settingsStatus"
+                label="Status"
+                :items="['planning', 'active', 'paused', 'completed', 'cancelled']"
+              />
+              <v-text-field v-model="settingsDescription" label="Description" />
+              <v-btn color="primary" class="mt-2" @click="handleSaveSettings">Save</v-btn>
+            </v-card-text>
+          </v-card>
+        </v-window-item>
+      </v-window>
+    </template>
 
-      <v-window-item value="ideas">
-        <v-card border flat>
-          <v-list lines="two">
-            <v-list-item
-              v-for="idea in store.ideas"
-              :key="idea.id"
-              :title="idea.title"
-              :subtitle="idea.status"
-              prepend-icon="$idea"
-            />
-          </v-list>
-        </v-card>
-      </v-window-item>
+    <div v-else-if="!loading" class="text-center py-8">
+      <p class="text-body-1 text-medium-emphasis">Project not found.</p>
+    </div>
 
-      <v-window-item value="links">
-        <v-card border flat>
-          <v-list>
-            <v-list-item
-              title="BITNP Keycloak Account Service"
-              subtitle="https://github.com/BITNP/keycloak-account-service"
-              prepend-icon="$link"
-            />
-          </v-list>
-        </v-card>
-      </v-window-item>
-
-      <v-window-item value="activity">
-        <v-card border flat>
-          <v-timeline side="end" density="compact">
-            <v-timeline-item dot-color="primary" size="small">
-              <div class="font-weight-medium">task.rescheduled</div>
-              <div class="text-body-2 text-medium-emphasis">Devon updated task_idea_api end date.</div>
-            </v-timeline-item>
-            <v-timeline-item dot-color="secondary" size="small">
-              <div class="font-weight-medium">idea.linked</div>
-              <div class="text-body-2 text-medium-emphasis">Alice linked the Gantt dependency idea.</div>
-            </v-timeline-item>
-          </v-timeline>
-        </v-card>
-      </v-window-item>
-
-      <v-window-item value="settings">
-        <v-card border flat>
-          <v-card-title>Project settings</v-card-title>
-          <v-card-text>
-            <v-text-field label="Project name" :model-value="project.name" />
-            <v-select label="Status" :items="['planning', 'active', 'paused', 'completed', 'cancelled']" :model-value="project.status" />
-          </v-card-text>
-        </v-card>
-      </v-window-item>
-    </v-window>
+    <v-dialog v-model="addTaskDialog" max-width="520">
+      <v-card title="Add Task">
+        <v-card-text>
+          <v-text-field v-model="newTaskTitle" label="Title" />
+          <v-textarea v-model="newTaskDescription" label="Description" rows="3" />
+          <v-select
+            v-model="newTaskStatus"
+            label="Status"
+            :items="['todo', 'in_progress', 'review', 'completed']"
+          />
+          <v-text-field v-model="newTaskAssignee" label="Assignee" />
+          <v-text-field v-model="newTaskStartDate" label="Start date" type="date" />
+          <v-text-field v-model="newTaskEndDate" label="End date" type="date" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="addTaskDialog = false">Cancel</v-btn>
+          <v-btn color="primary" variant="tonal" :disabled="!newTaskTitle" @click="handleAddTask">Create</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 

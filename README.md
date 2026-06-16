@@ -1,6 +1,6 @@
 # BITNP IDEAS
 
-BITNP IDEAS is an internal idea-driven execution administration system. It turns ideas into projects, tasks, schedules, activity streams, and audit logs.
+BITNP IDEAS is an internal _**I**dea-**D**riven **E**xecution **A**dministration **S**ystem_. It turns ideas into projects, tasks, schedules, activity streams, and audit logs.
 
 ## Stack
 

@@ -18,3 +18,6 @@ apps/backend/alembic/versions/*.py
 !apps/backend/alembic/versions/.gitkeep
 apps/frontend/.vite/
 apps/backend/.venv/
+
+
+.sysyphus/

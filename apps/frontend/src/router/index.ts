@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
@@ -13,7 +14,6 @@ const routes = [
   { path: '/projects/:id/activity', name: 'project-activity', component: () => import('@/pages/ProjectDetailPage.vue') },
   { path: '/api-keys', name: 'api-keys', component: () => import('@/pages/ApiKeysPage.vue') },
   { path: '/users', name: 'users', component: () => import('@/pages/UsersPage.vue') },
-  { path: '/settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue') },
 ]
 
 const router = createRouter({
@@ -21,5 +21,33 @@ const router = createRouter({
   routes,
 })
 
-export default router
+// ── Auth guard ───────────────────────────────────────────
+const PUBLIC_ROUTES = ['/login']
+let sessionRestored = false
 
+router.beforeEach(async (to, _from, next) => {
+  const auth = useAuthStore()
+
+  // Restore session once on first navigation
+  if (!sessionRestored) {
+    sessionRestored = true
+    await auth.restoreSession()
+  }
+
+  // Public route — allow, but redirect to dashboard if already authenticated
+  if (PUBLIC_ROUTES.includes(to.path)) {
+    if (auth.isAuthenticated) {
+      return next('/dashboard')
+    }
+    return next()
+  }
+
+  // Protected route — require authentication
+  if (!auth.isAuthenticated) {
+    return next('/login')
+  }
+
+  next()
+})
+
+export default router
