@@ -1,0 +1,5 @@
+{
+  "typescript.tsdk": "apps/frontend/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "vue.server.hybridMode": false
+}
