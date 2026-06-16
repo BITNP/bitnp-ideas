@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { VDateInput } from 'vuetify/components/VDateInput'
 
 import GanttBoard from '@/components/GanttBoard.vue'
 import MetricTile from '@/components/MetricTile.vue'
@@ -13,7 +14,7 @@ const projectId = route.params.id as string
 const tab = ref(route.name === 'project-gantt' ? 'gantt' : route.name === 'project-activity' ? 'activity' : 'overview')
 
 const project = ref<ProjectRead | null>(null)
-const tasks = ref<TaskRead[]>([])
+const tasks = ref<Array<TaskRead | GanttRead['tasks'][number]>>([])
 const ganttData = ref<GanttRead | null>(null)
 const activities = ref<ActivityRead[]>([])
 const projectIdeas = ref<IdeaRead[]>([])
@@ -21,15 +22,13 @@ const links = ref<ExternalLinkRead[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-const openTaskCount = computed(() => tasks.value.filter((t) => t.status !== 'completed').length)
+const openTaskCount = computed(() => tasks.value.filter((t) => t.status !== 'done').length)
 
 const addTaskDialog = ref(false)
 const newTaskTitle = ref('')
 const newTaskDescription = ref('')
-const newTaskStatus = ref('todo')
 const newTaskAssignee = ref('')
-const newTaskStartDate = ref('')
-const newTaskEndDate = ref('')
+const taskDateRange = ref<Date[]>([])
 
 const settingsName = ref('')
 const settingsStatus = ref('')
@@ -43,7 +42,7 @@ onMounted(async () => {
     project.value = res.data
     settingsName.value = res.data.name
     settingsStatus.value = res.data.status
-    settingsDescription.value = res.data.description
+    settingsDescription.value = res.data.description ?? ''
   } catch {
     error.value = 'Failed to load project.'
     loading.value = false
@@ -60,10 +59,7 @@ onMounted(async () => {
   loading.value = false
 
   if (tab.value === 'gantt') {
-    try {
-      const res = await ganttApi.get(projectId)
-      ganttData.value = res.data
-    } catch { /* empty gantt */ }
+    fetchGantt()
   } else if (tab.value === 'activity') {
     fetchActivities()
   } else if (tab.value === 'ideas') {
@@ -77,7 +73,7 @@ watch(tab, (newTab) => {
   if (newTab === 'tasks' && tasks.value.length === 0) {
     tasksApi.list(projectId).then((res) => { tasks.value = res.data }).catch(() => {})
   } else if (newTab === 'gantt' && !ganttData.value) {
-    ganttApi.get(projectId).then((res) => { ganttData.value = res.data }).catch(() => {})
+    fetchGantt()
   } else if (newTab === 'activity' && activities.value.length === 0) {
     fetchActivities()
   } else if (newTab === 'ideas' && projectIdeas.value.length === 0) {
@@ -103,9 +99,19 @@ async function fetchIdeas() {
 
 async function fetchLinks() {
   try {
-    const res = await linksApi.list('projects', projectId)
+    const res = await linksApi.list('project', projectId)
     links.value = res.data
   } catch { /* empty */ }
+}
+
+async function fetchGantt() {
+  try {
+    const res = await ganttApi.get(projectId)
+    ganttData.value = res.data
+    tasks.value = res.data.tasks
+  } catch {
+    ganttData.value = null
+  }
 }
 
 async function handleAddTask() {
@@ -114,19 +120,19 @@ async function handleAddTask() {
     const res = await tasksApi.create(projectId, {
       title: newTaskTitle.value,
       description: newTaskDescription.value || undefined,
-      status: newTaskStatus.value,
       assignee_id: newTaskAssignee.value || undefined,
-      start_date: newTaskStartDate.value || undefined,
-      end_date: newTaskEndDate.value || undefined,
+      start_date: taskDateRange.value[0]?.toISOString().slice(0, 10) || undefined,
+      end_date: taskDateRange.value[1]?.toISOString().slice(0, 10) || undefined,
     })
     tasks.value.push(res.data)
     addTaskDialog.value = false
     newTaskTitle.value = ''
     newTaskDescription.value = ''
-    newTaskStatus.value = 'todo'
     newTaskAssignee.value = ''
-    newTaskStartDate.value = ''
-    newTaskEndDate.value = ''
+    taskDateRange.value = []
+    if (ganttData.value) {
+      fetchGantt()
+    }
   } catch {
     error.value = 'Failed to create task.'
   }
@@ -144,6 +150,11 @@ async function handleSaveSettings() {
   } catch {
     error.value = 'Failed to update project settings.'
   }
+}
+
+function handleGanttError(message: string) {
+  error.value = message
+  fetchGantt()
 }
 </script>
 
@@ -240,6 +251,9 @@ async function handleSaveSettings() {
             v-if="ganttData"
             :tasks="ganttData.tasks ?? []"
             :dependencies="ganttData.dependencies ?? []"
+            :project-id="projectId"
+            @refresh="fetchGantt"
+            @error="handleGanttError"
           />
           <v-card v-else border flat>
             <v-card-text class="text-medium-emphasis">No gantt data available.</v-card-text>
@@ -269,7 +283,7 @@ async function handleSaveSettings() {
               <v-list-item
                 v-for="link in links"
                 :key="link.id"
-                :title="link.title"
+                :title="link.title ?? link.url"
                 :subtitle="link.url"
                 prepend-icon="$link"
                 :href="link.url"
@@ -330,14 +344,8 @@ async function handleSaveSettings() {
         <v-card-text>
           <v-text-field v-model="newTaskTitle" label="Title" />
           <v-textarea v-model="newTaskDescription" label="Description" rows="3" />
-          <v-select
-            v-model="newTaskStatus"
-            label="Status"
-            :items="['todo', 'in_progress', 'review', 'completed']"
-          />
           <v-text-field v-model="newTaskAssignee" label="Assignee" />
-          <v-text-field v-model="newTaskStartDate" label="Start date" type="date" />
-          <v-text-field v-model="newTaskEndDate" label="End date" type="date" />
+          <v-date-input v-model="taskDateRange" label="Date range" multiple="range" clearable />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -348,4 +356,3 @@ async function handleSaveSettings() {
     </v-dialog>
   </div>
 </template>
-

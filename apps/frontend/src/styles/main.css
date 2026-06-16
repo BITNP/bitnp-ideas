@@ -50,33 +50,6 @@ body {
   gap: 16px;
 }
 
-.gantt-grid {
-  display: grid;
-  grid-template-columns: 320px minmax(520px, 1fr);
-  overflow-x: auto;
-}
-
-.gantt-row {
-  display: grid;
-  grid-template-columns: repeat(24, 34px);
-  align-items: center;
-  min-height: 48px;
-  border-bottom: 1px solid rgba(var(--ideas-color-ink-rgb), 0.08);
-}
-
-.gantt-bar {
-  height: 26px;
-  border-radius: 6px;
-  background: rgb(var(--v-theme-primary));
-  position: relative;
-  overflow: hidden;
-}
-
-.gantt-progress {
-  height: 100%;
-  background: rgba(var(--ideas-color-paper-rgb), 0.34);
-}
-
 @media (max-width: 960px) {
   .page-shell {
     max-width: 100%;

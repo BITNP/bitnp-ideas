@@ -43,9 +43,9 @@ function openRoleDialog(user: CurrentUser) {
 async function handleRoleUpdate() {
   if (!roleUserId.value) return
   try {
-    const res = await usersApi.updateRole(roleUserId.value, selectedRole.value)
+    await usersApi.updateRole(roleUserId.value, selectedRole.value)
     const idx = users.value.findIndex((u) => u.id === roleUserId.value)
-    if (idx !== -1) users.value[idx] = res.data
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], global_role: selectedRole.value as CurrentUser['global_role'] }
     roleDialog.value = false
   } catch {
     error.value = 'Failed to update role.'
@@ -55,9 +55,9 @@ async function handleRoleUpdate() {
 async function handleActiveChange(user: CurrentUser, value: boolean | null) {
   if (value === null) return
   try {
-    const res = await usersApi.updateActive(user.id, value)
+    await usersApi.updateActive(user.id, value)
     const idx = users.value.findIndex((u) => u.id === user.id)
-    if (idx !== -1) users.value[idx] = res.data
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], is_active: value }
   } catch {
     error.value = 'Failed to update active status.'
   }

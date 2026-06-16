@@ -26,7 +26,7 @@ CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 def validate_task_dates(start_date, end_date) -> None:
     if start_date and end_date and start_date > end_date:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Task start_date cannot be after end_date.",
         )
 

@@ -2124,7 +2124,106 @@ Cross-project dependencies
 
 ------
 
-# 22. 总结
+# 22. 当前实现对照、接口契约与测试覆盖
+
+本章记录 v1 当前代码实现与设计目标之间的对照关系，用于后续开发、测试补齐和前后端接口联调。
+
+## 22.1 当前已落地范围
+
+当前仓库已经形成可运行的 monorepo 基础：
+
+- 后端 FastAPI 应用已挂载 `health/auth/users/ideas/idea-tags/projects/tasks/gantt/api-keys/activity/external-links` 路由。
+- 后端路由本身不带 `/api/v1` 前缀，前端通过 Vite proxy 和 nginx 将 `/api/v1/*` 剥离后转发到后端裸路径。
+- 数据模型已覆盖用户、idea、tag、项目、成员、项目-idea 关联、任务、依赖、API Key、nonce、activity、audit、external link。
+- 前端已具备登录、dashboard、ideas、projects、project detail、gantt、api keys、users 页面。
+- 甘特图已接入前后端批量更新、任务依赖创建和删除。
+- Activity Stream 和 Audit Log 写入 helper 已在任务、项目成员、依赖、idea、API Key 等关键动作中使用。
+- 后端配置统一来自 YAML，开发默认配置为 `apps/backend/config.yaml`。
+
+## 22.2 版本化 API 前缀契约
+
+第一版必须保持以下分层：
+
+```text
+Frontend request: /api/v1/ideas
+Vite/nginx proxy: strip /api/v1
+Backend route: /ideas
+OpenAPI path: /ideas
+```
+
+因此：
+
+- 后端 FastAPI 不直接挂 `/api/v1`。
+- OpenAPI 测试必须持续断言不存在 `/api/v1/*`。
+- API Key 签名的 canonical path 使用后端实际接收路径，例如 `/ideas`，不是代理层的 `/api/v1/ideas`。
+- 前端代码可以继续用 `/api/v1` 作为 axios baseURL。
+
+## 22.3 前后端接口对接规则
+
+后端 OpenAPI 是第一版 API 契约事实来源。前端手写类型必须与后端保持一致，尤其注意：
+
+- API 字段使用 snake_case，例如 `created_at`、`updated_at`、`project_id`、`start_date`。
+- `POST /ideas/{idea_id}/status` 返回 `ApiMessage`，前端成功后需要重新拉取 idea 或本地合并状态。
+- `PATCH /users/{user_id}/role` 使用 query 参数 `role`，返回 `ApiMessage`。
+- `PATCH /users/{user_id}/active` 使用 query 参数 `is_active`，返回 `ApiMessage`。
+- `POST /api-keys` 和 `POST /api-keys/{api_key_id}/rotate` 返回 `{ api_key, secret }`，secret 只展示一次。
+- `PATCH /api-keys/{api_key_id}` 返回 `ApiMessage`，前端应本地合并 name/is_active/scopes 或重新拉取列表。
+- external link 的 `entity_type` 只允许单数：`idea`、`project`、`task`。
+- `TaskDependencyCreate.dependency_type` 第一版只允许 `finish_to_start`。
+- `IdeaCreate` 当前后端接收 `tag_names`；如果产品希望用 `tag_ids` 创建 idea，需要先变更后端 schema 和 OpenAPI。
+
+## 22.4 当前端点测试覆盖
+
+后端端点测试采用临时 SQLite async 数据库和 FastAPI dependency override，不依赖真实 PostgreSQL。
+
+当前覆盖：
+
+| 测试文件 | 覆盖内容 |
+| -------- | -------- |
+| `tests/test_app.py` | `/health`、OpenAPI smoke、后端无 `/api/v1` 前缀 |
+| `tests/test_config.py` | YAML 配置解析、非法数据库 URL 拒绝 |
+| `tests/test_openapi_contract.py` | 前端依赖的 schema 字段、Gantt bulk status、link preview shape |
+| `tests/test_api_endpoints.py` | users RBAC、idea/tag/status/history、project/task/gantt/dependency/activity、external links、API key 管理和签名边界 |
+
+测试必须继续覆盖以下边界：
+
+- developer 不能创建项目。
+- developer 只能访问自己参与的项目。
+- task 日期不能倒置。
+- task update 和 gantt bulk update 必须校验 version。
+- task dependency 不允许重复、自依赖、跨项目和形成 cycle。
+- idea 进入 `in_progress/completed` 必须关联 project 或 URL。
+- API Key scope 只能是 `ideas:read` 和 `ideas:write`。
+- API Key 只能访问 idea/tag 相关读写，不得访问 projects/tasks/users/gantt。
+- Activity/Audit 写入 JSON 字段前必须进行 JSON-safe 编码，避免 date/enum 无法序列化。
+
+## 22.5 当前已知偏差与待补项
+
+以下项目尚未达到最终设计，需要后续补齐：
+
+- API Key secret 当前实现仍以可签名明文形式写入 `secret_hash` 字段；最终必须改为不明文存储的方案，并相应调整验签机制。
+- OIDC callback 当前未校验前端持有的 state，JWT 当前未包含 `exp`。
+- Audit Log 已有模型和写入，但没有 `/audit-logs` 查询 API 和前端页面。
+- 非 Docker 部署仍缺独立文档，需要补 systemd、nginx、PostgreSQL、配置路径和 migration 流程。
+- Project Detail 已有 tabs，但成员管理、关联 idea 管理、external link 创建/删除、任务详情 drawer 仍需完善。
+- Gantt UI 已支持核心拖动和依赖操作，但 day/week/month 三档视图和任务详情 drawer 仍需补全。
+- Dashboard 当前按项目逐个拉 tasks/activity，项目多时需要后端聚合端点或分页策略。
+- OpenAPI 到 TypeScript 的自动生成链路尚未建立，当前仍依赖手写 `apps/frontend/src/types/api.ts` 和契约测试保护。
+
+## 22.6 后续优先级
+
+下一阶段建议按以下顺序推进：
+
+1. 修 API Key secret 存储与验签实现，确保 secret 不以明文或等价明文存储。
+2. 增加 Audit Log 查询 API，只允许 superuser 或受限 administrator 查看。
+3. 建立 OpenAPI -> TypeScript 生成或契约比对脚本，减少前后端类型漂移。
+4. 补 Project Detail 的成员、linked ideas、external links 可操作 UI。
+5. 补 OIDC state 校验、JWT 过期时间和 logout/session 语义。
+6. 补非 Docker 部署文档。
+
+------
+
+# 23. 总结
 
 BITNP IDEAS 的最终形态是：
 

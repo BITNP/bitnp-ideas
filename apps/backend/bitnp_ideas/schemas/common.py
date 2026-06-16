@@ -51,6 +51,7 @@ class IdeaTagRead(BaseModel):
     description: str | None = None
     is_active: bool = True
     usage_count: int = 0
+    created_at: datetime
 
 
 class IdeaRead(BaseModel):
@@ -135,6 +136,8 @@ class ProjectRead(BaseModel):
     start_date: date | None = None
     target_end_date: date | None = None
     members: list[EntityRef] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
 
 
 class ProjectCreate(BaseModel):
@@ -176,6 +179,8 @@ class TaskRead(BaseModel):
     end_date: date | None = None
     progress: int
     version: int
+    created_at: datetime
+    updated_at: datetime
 
 
 class TaskCreate(BaseModel):
@@ -218,6 +223,7 @@ class GanttBulkChange(BaseModel):
     end_date: date | None = None
     assignee_id: str | None = None
     progress: int | None = Field(default=None, ge=0, le=100)
+    status: TaskStatus | None = None
 
 
 class GanttBulkUpdate(BaseModel):
@@ -241,6 +247,7 @@ class ApiKeyRead(BaseModel):
     allowed_entities: list[str]
     is_active: bool
     last_used_at: datetime | None = None
+    created_at: datetime
 
 
 class ApiKeyCreate(BaseModel):
@@ -279,7 +286,11 @@ class ExternalLinkRead(BaseModel):
     entity_id: str
     url: str
     title: str | None = None
+    description: str | None = None
+    image_url: str | None = None
+    site_name: str | None = None
     link_type: ExternalLinkType | None = None
+    created_at: datetime
 
 
 class ExternalLinkCreate(BaseModel):
@@ -287,3 +298,10 @@ class ExternalLinkCreate(BaseModel):
     title: str | None = None
     description: str | None = None
     link_type: ExternalLinkType | None = ExternalLinkType.WEBSITE
+
+
+class LinkPreview(BaseModel):
+    url: str
+    title: str | None = None
+    description: str | None = None
+    image: str | None = None

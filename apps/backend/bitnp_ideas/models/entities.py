@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Date,
     DateTime,
@@ -26,6 +27,10 @@ from bitnp_ideas.models.enums import (
     ProjectStatus,
     TaskStatus,
 )
+
+postgres_jsonb = JSONB().with_variant(JSON(), "sqlite")
+postgres_text_array = ARRAY(Text).with_variant(JSON(), "sqlite")
+postgres_inet = INET().with_variant(String(45), "sqlite")
 
 
 class User(Base, TimestampMixin):
@@ -257,9 +262,9 @@ class ApiKey(Base):
     key_id: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
     secret_hash: Mapped[str] = mapped_column(Text, nullable=False)
     secret_last4: Mapped[str] = mapped_column(String(4), nullable=False)
-    scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(postgres_text_array, nullable=False)
     allowed_entities: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), default=["idea"], nullable=False
+        postgres_text_array, default=["idea"], nullable=False
     )
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -291,9 +296,9 @@ class ActivityStream(Base):
     action_type: Mapped[str] = mapped_column(String(80), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(32), nullable=False)
     entity_id: Mapped[str] = mapped_column(nullable=False)
-    before: Mapped[dict | None] = mapped_column(JSONB)
-    after: Mapped[dict | None] = mapped_column(JSONB)
-    metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB)
+    before: Mapped[dict | None] = mapped_column(postgres_jsonb)
+    after: Mapped[dict | None] = mapped_column(postgres_jsonb)
+    metadata_: Mapped[dict | None] = mapped_column("metadata", postgres_jsonb)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -306,11 +311,11 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(120), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(32), nullable=False)
     entity_id: Mapped[str | None]
-    before: Mapped[dict | None] = mapped_column(JSONB)
-    after: Mapped[dict | None] = mapped_column(JSONB)
-    ip_address: Mapped[str | None] = mapped_column(INET)
+    before: Mapped[dict | None] = mapped_column(postgres_jsonb)
+    after: Mapped[dict | None] = mapped_column(postgres_jsonb)
+    ip_address: Mapped[str | None] = mapped_column(postgres_inet)
     user_agent: Mapped[str | None] = mapped_column(Text)
-    metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB)
+    metadata_: Mapped[dict | None] = mapped_column("metadata", postgres_jsonb)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -326,7 +331,7 @@ class ExternalLink(Base):
     image_url: Mapped[str | None] = mapped_column(Text)
     site_name: Mapped[str | None] = mapped_column(Text)
     link_type: Mapped[ExternalLinkType | None] = mapped_column(String(32))
-    metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB)
+    metadata_: Mapped[dict | None] = mapped_column("metadata", postgres_jsonb)
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

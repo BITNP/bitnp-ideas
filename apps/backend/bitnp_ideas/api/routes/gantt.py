@@ -115,6 +115,7 @@ async def bulk_update_gantt(
             "start_date": str(task.start_date) if task.start_date else None,
             "end_date": str(task.end_date) if task.end_date else None,
             "assignee_id": task.assignee_id,
+            "status": task.status,
             "progress": task.progress,
             "version": task.version,
         }

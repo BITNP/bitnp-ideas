@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bitnp_ideas.db.session import get_db_session
 from bitnp_ideas.models.entities import ExternalLink
 from bitnp_ideas.models.enums import EntityType
-from bitnp_ideas.schemas.common import ApiMessage, CurrentUser, ExternalLinkCreate, ExternalLinkRead
+from bitnp_ideas.schemas.common import (
+    ApiMessage,
+    CurrentUser,
+    ExternalLinkCreate,
+    ExternalLinkRead,
+    LinkPreview,
+)
 from bitnp_ideas.security.rbac import get_current_user
 from bitnp_ideas.services.backend import add_audit, utcnow
 
@@ -33,7 +39,11 @@ def read_link(link: ExternalLink) -> ExternalLinkRead:
         entity_id=link.entity_id,
         url=link.url,
         title=link.title,
+        description=link.description,
+        image_url=link.image_url,
+        site_name=link.site_name,
         link_type=link.link_type,
+        created_at=link.created_at,
     )
 
 
@@ -108,13 +118,11 @@ async def delete_link(link_id: str, user: CurrentUserDep, session: DbSessionDep)
     return ApiMessage(message=f"link {link_id} deleted")
 
 
-@router.post("/links/preview", response_model=ExternalLinkRead)
-async def preview_link(payload: ExternalLinkCreate) -> ExternalLinkRead:
-    return ExternalLinkRead(
-        id="preview",
-        entity_type=EntityType.IDEA,
-        entity_id="preview",
+@router.post("/links/preview", response_model=LinkPreview)
+async def preview_link(payload: ExternalLinkCreate) -> LinkPreview:
+    return LinkPreview(
         url=payload.url,
         title=payload.title or payload.url,
-        link_type=payload.link_type,
+        description=payload.description,
+        image=None,
     )

@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { useTheme } from 'vuetify'
+import { useDisplay, useTheme } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
+
+const LAYOUT_BREAKPOINT = 960
 
 const route = useRoute()
 const theme = useTheme()
+const display = useDisplay()
 const auth = useAuthStore()
-const drawer = ref(window.innerWidth >= 960)
+const isDesktopLayout = computed(() => display.width.value >= LAYOUT_BREAKPOINT)
+const drawer = ref(isDesktopLayout.value)
 
 const navItems = [
   { title: 'Dashboard', to: '/dashboard', icon: '$dashboard' },
@@ -19,6 +23,10 @@ const navItems = [
 
 const title = computed(() => navItems.find((item) => route.path.startsWith(item.to))?.title ?? 'Dashboard')
 const isDark = computed(() => theme.global.current.value.dark)
+
+watch(isDesktopLayout, (desktop) => {
+  drawer.value = desktop
+}, { immediate: true })
 
 function toggleTheme() {
   theme.global.name.value = isDark.value ? 'ideasLight' : 'ideasDark'
@@ -40,7 +48,13 @@ async function handleLogout() {
 
     <!-- Default layout with sidebar + app bar -->
     <template v-else-if="auth.ready">
-      <v-navigation-drawer v-model="drawer" width="268">
+      <v-navigation-drawer
+        v-model="drawer"
+        :temporary="!isDesktopLayout"
+        :permanent="isDesktopLayout"
+        :mobile-breakpoint="LAYOUT_BREAKPOINT"
+        width="268"
+      >
         <div class="pa-4">
           <div class="text-h6 font-weight-bold">BITNP IDEAS</div>
           <div class="text-caption text-medium-emphasis">Idea-Driven Execution</div>
@@ -53,7 +67,6 @@ async function handleLogout() {
             :to="item.to"
             :prepend-icon="item.icon"
             :title="item.title"
-            rounded="lg"
           />
         </v-list>
       </v-navigation-drawer>

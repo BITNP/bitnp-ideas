@@ -1,5 +1,6 @@
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
+import 'jordium-gantt-vue3/dist/assets/jordium-gantt-vue3.css'
 import './styles/main.css'
 
 import App from './App.vue'

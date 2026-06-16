@@ -10,7 +10,9 @@ const error = ref<string | null>(null)
 const createDialog = ref(false)
 const createName = ref('')
 const createScopes = ref('')
-const createAllowedEntities = ref('')
+
+const deleteDialog = ref(false)
+const deleteTarget = ref<ApiKeyRead | null>(null)
 
 onMounted(async () => {
   loading.value = true
@@ -28,7 +30,6 @@ onMounted(async () => {
 function openCreateDialog() {
   createName.value = ''
   createScopes.value = ''
-  createAllowedEntities.value = ''
   createDialog.value = true
 }
 
@@ -37,9 +38,8 @@ async function handleCreate() {
     const res = await apiKeysApi.create({
       name: createName.value,
       scopes: createScopes.value ? createScopes.value.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
-      allowed_entities: createAllowedEntities.value ? createAllowedEntities.value.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
     })
-    keys.value.unshift(res.data)
+    keys.value.unshift(res.data.api_key)
     createDialog.value = false
   } catch {
     error.value = 'Failed to create API key.'
@@ -48,19 +48,28 @@ async function handleCreate() {
 
 async function handleToggle(key: ApiKeyRead) {
   try {
-    const res = await apiKeysApi.update(key.id, { is_active: !key.is_active })
+    const nextActive = !key.is_active
+    await apiKeysApi.update(key.id, { is_active: nextActive })
     const idx = keys.value.findIndex((k) => k.id === key.id)
-    if (idx !== -1) keys.value[idx] = res.data
+    if (idx !== -1) keys.value[idx] = { ...keys.value[idx], is_active: nextActive }
   } catch {
     error.value = 'Failed to update API key.'
   }
 }
 
-async function handleDelete(key: ApiKeyRead) {
-  if (!confirm(`Delete API key "${key.name}"? This action cannot be undone.`)) return
+function handleDelete(key: ApiKeyRead) {
+  deleteTarget.value = key
+  deleteDialog.value = true
+}
+
+async function handleConfirmDelete() {
+  const target = deleteTarget.value
+  if (!target) return
   try {
-    await apiKeysApi.delete(key.id)
-    keys.value = keys.value.filter((k) => k.id !== key.id)
+    await apiKeysApi.delete(target.id)
+    keys.value = keys.value.filter((k) => k.id !== target.id)
+    deleteDialog.value = false
+    deleteTarget.value = null
   } catch {
     error.value = 'Failed to delete API key.'
   }
@@ -117,7 +126,8 @@ async function handleDelete(key: ApiKeyRead) {
                 :title="key.is_active ? 'Revoke' : 'Activate'"
                 @click="handleToggle(key)"
               >
-                <v-icon>{{ key.is_active ? '$block' : '$check' }}</v-icon>
+                <v-icon v-if="key.is_active" size="18">$block</v-icon>
+                <v-icon v-else>$check</v-icon>
               </v-btn>
               <v-btn
                 icon
@@ -140,12 +150,24 @@ async function handleDelete(key: ApiKeyRead) {
         <v-card-text>
           <v-text-field v-model="createName" label="Name" />
           <v-text-field v-model="createScopes" label="Scopes (comma-separated)" hint="e.g. ideas:read, ideas:write" persistent-hint />
-          <v-text-field v-model="createAllowedEntities" label="Allowed Entities (comma-separated)" hint="e.g. idea, project" persistent-hint />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="createDialog = false">Cancel</v-btn>
           <v-btn color="primary" variant="tonal" :disabled="!createName" @click="handleCreate">Create</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="deleteDialog" max-width="480">
+      <v-card title="Revoke API Key">
+        <v-card-text>
+          Revoke API key "{{ deleteTarget?.name }}"? The record remains for audit history.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="deleteDialog = false">Cancel</v-btn>
+          <v-btn color="error" variant="tonal" @click="handleConfirmDelete">Revoke</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

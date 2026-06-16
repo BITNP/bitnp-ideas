@@ -5,6 +5,7 @@ import {
   mdiAccountCircleOutline,
   mdiAccountGroupOutline,
   mdiApi,
+  mdiBlockHelper,
   mdiCalendarClock,
   mdiChartTimelineVariant,
   mdiCheckCircleOutline,
@@ -47,6 +48,7 @@ export default createVuetify({
       account: mdiAccountCircleOutline,
       activity: mdiSourceBranch,
       api: mdiApi,
+      block: mdiBlockHelper,
       calendar: mdiCalendarClock,
       check: mdiCheckCircleOutline,
       close: mdiClose,
@@ -69,12 +71,8 @@ export default createVuetify({
     },
   },
   defaults: {
-    VBtn: {
-      rounded: 'lg',
-    },
-    VCard: {
-      rounded: 'lg',
-    },
+    VBtn: {},
+    VCard: {},
     VTextField: {
       density: 'compact',
       variant: 'outlined',

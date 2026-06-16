@@ -92,7 +92,7 @@ onMounted(async () => {
     allActivities.value = collectedActivities
   }
 
-  if (ideas.value.length === 0 && projects.value.length === 0 && allTasks.value.length === 0) {
+  if (ideasResult.status === 'rejected' && projectsResult.status === 'rejected') {
     error.value = 'Failed to load dashboard data. Please try again.'
   }
 
@@ -129,7 +129,7 @@ onMounted(async () => {
     </div>
 
     <div class="content-grid">
-      <GanttBoard :tasks="allTasks" />
+      <GanttBoard :tasks="allTasks" compact readonly />
 
       <v-card border flat>
         <v-card-title>Recent activity</v-card-title>

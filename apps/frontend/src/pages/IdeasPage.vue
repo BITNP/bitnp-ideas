@@ -39,7 +39,7 @@ onMounted(async () => {
     const [ideasRes, tagsRes] = await Promise.all([ideasApi.list(), tagsApi.list()])
     ideas.value = ideasRes.data
     tags.value = tagsRes.data
-  } catch (e) {
+  } catch {
     error.value = 'Failed to load ideas. Please try again.'
   } finally {
     loading.value = false
@@ -53,11 +53,12 @@ function openIdea(id: string) {
 
 async function handleStatusChange(id: string, status: string) {
   try {
-    const res = await ideasApi.updateStatus(id, { status })
+    await ideasApi.updateStatus(id, { status })
+    const res = await ideasApi.get(id)
     const idx = ideas.value.findIndex((i) => i.id === id)
     if (idx !== -1) ideas.value[idx] = res.data
   } catch {
-    error.value = 'Failed to update status.'
+    error.value = 'Failed to update status. In progress and completed ideas require a linked project or URL.'
   }
 }
 
@@ -77,7 +78,9 @@ async function handleCreate() {
       title: createTitle.value,
       description: createDescription.value || undefined,
       priority: createPriority.value,
-      tag_ids: createTagIds.value.length > 0 ? createTagIds.value : undefined,
+      tag_names: createTagIds.value.length > 0
+        ? tags.value.filter((tag) => createTagIds.value.includes(tag.id)).map((tag) => tag.name)
+        : undefined,
     })
     ideas.value.unshift(res.data)
     createDialog.value = false
@@ -136,7 +139,7 @@ async function handleCreate() {
           <v-card-text>
             <p class="text-body-2 text-medium-emphasis">{{ idea.description }}</p>
             <div class="d-flex flex-wrap ga-2">
-              <v-chip v-for="tag in idea.tags" :key="tag.id" :color="tag.color" size="small" variant="tonal">
+              <v-chip v-for="tag in idea.tags" :key="tag.id" :color="tag.color ?? undefined" size="small" variant="tonal">
                 {{ tag.name }}
               </v-chip>
             </div>
@@ -169,7 +172,7 @@ async function handleCreate() {
           <div class="mt-4">
             <p class="text-caption text-medium-emphasis mb-2">Tags</p>
             <div class="d-flex flex-wrap ga-2">
-              <v-chip v-for="tag in activeIdea.tags" :key="tag.id" :color="tag.color" size="small" variant="tonal">
+              <v-chip v-for="tag in activeIdea.tags" :key="tag.id" :color="tag.color ?? undefined" size="small" variant="tonal">
                 {{ tag.name }}
               </v-chip>
             </div>

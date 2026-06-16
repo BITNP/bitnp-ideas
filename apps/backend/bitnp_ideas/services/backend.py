@@ -2,6 +2,7 @@ import re
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -164,6 +165,8 @@ async def serialize_project(session: AsyncSession, project: Project) -> ProjectR
         start_date=project.start_date,
         target_end_date=project.target_end_date,
         members=[EntityRef(id=user.id, name=user.display_name) for user in members_result],
+        created_at=project.created_at,
+        updated_at=project.updated_at,
     )
 
 
@@ -180,6 +183,8 @@ async def serialize_task(session: AsyncSession, task: ProjectTask) -> TaskRead:
         end_date=task.end_date,
         progress=task.progress,
         version=task.version,
+        created_at=task.created_at,
+        updated_at=task.updated_at,
     )
 
 
@@ -217,9 +222,9 @@ def add_audit(
             action=action,
             entity_type=entity_type,
             entity_id=entity_id,
-            before=before,
-            after=after,
-            metadata_=metadata,
+            before=jsonable_encoder(before),
+            after=jsonable_encoder(after),
+            metadata_=jsonable_encoder(metadata),
             created_at=utcnow(),
         )
     )
@@ -244,9 +249,9 @@ def add_activity(
             action_type=action_type,
             entity_type=entity_type,
             entity_id=entity_id,
-            before=before,
-            after=after,
-            metadata_=metadata,
+            before=jsonable_encoder(before),
+            after=jsonable_encoder(after),
+            metadata_=jsonable_encoder(metadata),
             created_at=utcnow(),
         )
     )
