@@ -7,14 +7,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bitnp_ideas.db.session import get_db_session
 from bitnp_ideas.models.entities import ProjectTask
 from bitnp_ideas.models.enums import TaskStatus
-from bitnp_ideas.schemas.common import ApiMessage, CurrentUser, TaskCreate, TaskRead, TaskUpdate
+from bitnp_ideas.schemas.common import (
+    ApiMessage,
+    CurrentUser,
+    Page,
+    TaskCreate,
+    TaskRead,
+    TaskUpdate,
+)
 from bitnp_ideas.security.rbac import get_current_user
 from bitnp_ideas.services.backend import (
     add_activity,
     add_audit,
     ensure_project_access,
     ensure_project_member,
+    normalized_limit,
+    normalized_offset,
     serialize_task,
+    total_for_statement,
     utcnow,
 )
 
@@ -31,19 +41,27 @@ def validate_task_dates(start_date, end_date) -> None:
         )
 
 
-@router.get("/projects/{project_id}/tasks", response_model=list[TaskRead])
+@router.get("/projects/{project_id}/tasks", response_model=Page[TaskRead])
 async def list_project_tasks(
     project_id: str,
     user: CurrentUserDep,
     session: DbSessionDep,
-) -> list[TaskRead]:
+    offset: int = 0,
+    limit: int = 50,
+) -> Page[TaskRead]:
     await ensure_project_access(session, user, project_id)
-    result = await session.scalars(
+    statement = (
         select(ProjectTask)
         .where(ProjectTask.project_id == project_id, ProjectTask.archived_at.is_(None))
         .order_by(ProjectTask.sort_order, ProjectTask.created_at)
     )
-    return [await serialize_task(session, task) for task in result]
+    total = await total_for_statement(session, statement)
+    result = await session.scalars(
+        statement
+        .offset(normalized_offset(offset))
+        .limit(normalized_limit(limit))
+    )
+    return Page(data=[await serialize_task(session, task) for task in result], total=total)
 
 
 @router.post("/projects/{project_id}/tasks", response_model=TaskRead, status_code=201)

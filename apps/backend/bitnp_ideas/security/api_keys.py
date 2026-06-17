@@ -4,6 +4,7 @@ import hmac
 from datetime import UTC, datetime
 from urllib.parse import parse_qsl, urlencode
 
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bitnp_ideas.core.config import settings
 from bitnp_ideas.models.entities import ApiKey, ApiKeyNonce, AuditLog
+
+PROTECTED_SECRET_PREFIX = "fernet:v1:"
 
 
 def body_sha256_hex(body: bytes) -> str:
@@ -45,6 +48,30 @@ def canonical_query_string(raw_query_string: bytes) -> str:
 
 def hash_secret(secret: str) -> str:
     return hashlib.sha256(secret.encode()).hexdigest()
+
+
+def _fernet() -> Fernet:
+    digest = hashlib.sha256(settings.security.session_secret_key.encode()).digest()
+    key = base64.urlsafe_b64encode(digest)
+    return Fernet(key)
+
+
+def protect_signing_secret(secret: str) -> str:
+    token = _fernet().encrypt(secret.encode()).decode()
+    return f"{PROTECTED_SECRET_PREFIX}{token}"
+
+
+def reveal_signing_secret(protected_secret: str) -> str:
+    if not protected_secret.startswith(PROTECTED_SECRET_PREFIX):
+        return protected_secret
+    token = protected_secret.removeprefix(PROTECTED_SECRET_PREFIX)
+    try:
+        return _fernet().decrypt(token.encode()).decode()
+    except InvalidToken as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key secret storage.",
+        ) from exc
 
 
 def scope_allowed(api_key: ApiKey, required_scope: str) -> bool:
@@ -169,7 +196,8 @@ async def verify_api_key_request(request: Request, session: AsyncSession) -> Api
         timestamp=timestamp,
         nonce=nonce,
     )
-    expected_signature = sign_canonical_request(api_key.secret_hash, canonical)
+    signing_secret = reveal_signing_secret(api_key.secret_hash)
+    expected_signature = sign_canonical_request(signing_secret, canonical)
     if not constant_time_compare(signature, expected_signature):
         await audit_api_key_failure(
             session,

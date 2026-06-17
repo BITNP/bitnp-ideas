@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from bitnp_ideas.api.routes import (
     activity,
     api_keys,
+    audit_logs,
     auth,
     external_links,
     gantt,
@@ -25,4 +26,5 @@ api_router.include_router(tasks.router, tags=["tasks"])
 api_router.include_router(gantt.router, tags=["gantt"])
 api_router.include_router(api_keys.router, prefix="/api-keys", tags=["api-keys"])
 api_router.include_router(activity.router, tags=["activity"])
+api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["audit-logs"])
 api_router.include_router(external_links.router, tags=["external-links"])

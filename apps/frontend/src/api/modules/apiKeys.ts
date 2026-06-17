@@ -1,8 +1,16 @@
 import api from '@/api/client'
-import type { ApiKeyRead, ApiKeyCreate, ApiKeyUpdate, ApiMessage, ApiKeyCreateResponse } from '@/types/api'
+import type {
+  ApiKeyRead,
+  ApiKeyCreate,
+  ApiKeyUpdate,
+  ApiMessage,
+  ApiKeyCreateResponse,
+  PaginationParams,
+  PageResponse,
+} from '@/types/api'
 
 export const apiKeysApi = {
-  list() { return api.get<ApiKeyRead[]>('/api-keys') },
+  list(params: PaginationParams = {}) { return api.get<PageResponse<ApiKeyRead>>('/api-keys', { params }) },
   create(data: ApiKeyCreate) { return api.post<ApiKeyCreateResponse>('/api-keys', data) },
   update(id: string, data: ApiKeyUpdate) { return api.patch<ApiMessage>(`/api-keys/${id}`, data) },
   delete(id: string) { return api.delete<ApiMessage>(`/api-keys/${id}`) },

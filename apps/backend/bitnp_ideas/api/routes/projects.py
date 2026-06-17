@@ -11,6 +11,7 @@ from bitnp_ideas.schemas.common import (
     ApiMessage,
     CurrentUser,
     IdeaRead,
+    Page,
     ProjectCreate,
     ProjectIdeaLinkCreate,
     ProjectMemberCreate,
@@ -22,8 +23,11 @@ from bitnp_ideas.services.backend import (
     add_activity,
     add_audit,
     ensure_project_access,
+    normalized_limit,
+    normalized_offset,
     serialize_idea,
     serialize_project,
+    total_for_statement,
     utcnow,
 )
 
@@ -35,15 +39,20 @@ ProjectAdminDep = Annotated[
 ]
 
 
-@router.get("", response_model=list[ProjectRead])
-async def list_projects(user: CurrentUserDep, session: DbSessionDep) -> list[ProjectRead]:
+@router.get("", response_model=Page[ProjectRead])
+async def list_projects(
+    user: CurrentUserDep, session: DbSessionDep, offset: int = 0, limit: int = 50
+) -> Page[ProjectRead]:
     statement = (
         select(Project).where(Project.archived_at.is_(None)).order_by(Project.updated_at.desc())
     )
     if user.global_role == GlobalRole.DEVELOPER:
         statement = statement.join(ProjectMember).where(ProjectMember.user_id == user.id)
-    result = await session.scalars(statement)
-    return [await serialize_project(session, project) for project in result]
+    total = await total_for_statement(session, statement)
+    result = await session.scalars(
+        statement.offset(normalized_offset(offset)).limit(normalized_limit(limit))
+    )
+    return Page(data=[await serialize_project(session, project) for project in result], total=total)
 
 
 @router.post("", response_model=ProjectRead, status_code=201)
@@ -237,18 +246,28 @@ async def remove_project_member(
     return ApiMessage(message=f"user {user_id} removed from project {project_id}")
 
 
-@router.get("/{project_id}/ideas", response_model=list[IdeaRead])
+@router.get("/{project_id}/ideas", response_model=Page[IdeaRead])
 async def list_project_ideas(
-    project_id: str, user: CurrentUserDep, session: DbSessionDep
-) -> list[IdeaRead]:
+    project_id: str,
+    user: CurrentUserDep,
+    session: DbSessionDep,
+    offset: int = 0,
+    limit: int = 50,
+) -> Page[IdeaRead]:
     await ensure_project_access(session, user, project_id)
-    result = await session.scalars(
+    statement = (
         select(Idea)
         .join(ProjectIdea, ProjectIdea.idea_id == Idea.id)
         .where(ProjectIdea.project_id == project_id)
         .order_by(Idea.updated_at.desc())
     )
-    return [await serialize_idea(session, idea) for idea in result]
+    total = await total_for_statement(session, statement)
+    result = await session.scalars(
+        statement
+        .offset(normalized_offset(offset))
+        .limit(normalized_limit(limit))
+    )
+    return Page(data=[await serialize_idea(session, idea) for idea in result], total=total)
 
 
 @router.post("/{project_id}/ideas", response_model=ApiMessage)

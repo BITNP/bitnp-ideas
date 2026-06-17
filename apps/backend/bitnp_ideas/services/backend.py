@@ -33,6 +33,21 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def normalized_offset(offset: int) -> int:
+    return max(offset, 0)
+
+
+def normalized_limit(limit: int) -> int:
+    return min(max(limit, 1), 100)
+
+
+async def total_for_statement(session: AsyncSession, statement) -> int:
+    total = await session.scalar(
+        select(func.count()).select_from(statement.order_by(None).subquery())
+    )
+    return total or 0
+
+
 def slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
     return slug or "tag"

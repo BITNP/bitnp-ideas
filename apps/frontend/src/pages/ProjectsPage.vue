@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { projectsApi } from '@/api/modules'
+import PaginationControls from '@/components/PaginationControls.vue'
 import type { ProjectRead } from '@/types/api'
 
 const projects = ref<ProjectRead[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+const pageOffset = ref(0)
+const pageLimit = ref(25)
+const pageTotal = ref(0)
 
 const dialog = ref(false)
 const form = ref({
@@ -16,18 +20,25 @@ const form = ref({
 })
 const submitting = ref(false)
 
-async function fetchProjects() {
+async function fetchProjects(offset = pageOffset.value, limit = pageLimit.value) {
   loading.value = true
   error.value = null
   try {
-    const res = await projectsApi.list()
-    projects.value = res.data
+    const res = await projectsApi.list({ offset, limit })
+    projects.value = res.data.data
+    pageTotal.value = res.data.total
+    pageOffset.value = offset
+    pageLimit.value = limit
   } catch (e: unknown) {
     const err = e as { response?: { data?: { detail?: string } }; message?: string }
     error.value = err.response?.data?.detail ?? err.message ?? 'Failed to load projects'
   } finally {
     loading.value = false
   }
+}
+
+function handlePageChange(page: { offset: number; limit: number }) {
+  fetchProjects(page.offset, page.limit)
 }
 
 async function createProject() {
@@ -37,7 +48,7 @@ async function createProject() {
     await projectsApi.create(form.value)
     dialog.value = false
     form.value = { key: '', name: '', description: '', status: 'planning' }
-    await fetchProjects()
+    await fetchProjects(0, pageLimit.value)
   } catch (e: unknown) {
     const err = e as { response?: { data?: { detail?: string } }; message?: string }
     error.value = err.response?.data?.detail ?? err.message ?? 'Failed to create project'
@@ -91,6 +102,14 @@ onMounted(() => {
         </tbody>
       </v-table>
     </v-card>
+
+    <PaginationControls
+      :offset="pageOffset"
+      :limit="pageLimit"
+      :total="pageTotal"
+      :loading="loading"
+      @page-change="handlePageChange"
+    />
 
     <v-dialog v-model="dialog" max-width="480">
       <v-card border flat>

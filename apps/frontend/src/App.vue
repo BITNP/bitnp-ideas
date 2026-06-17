@@ -13,15 +13,21 @@ const auth = useAuthStore()
 const isDesktopLayout = computed(() => display.width.value >= LAYOUT_BREAKPOINT)
 const drawer = ref(isDesktopLayout.value)
 
-const navItems = [
-  { title: 'Dashboard', to: '/dashboard', icon: '$dashboard' },
-  { title: 'Ideas', to: '/ideas', icon: '$idea' },
-  { title: 'Projects', to: '/projects', icon: '$gantt' },
-  { title: 'API Keys', to: '/api-keys', icon: '$key' },
-  { title: 'Users', to: '/users', icon: '$users' },
-]
+const navItems = computed(() => {
+  const items = [
+    { title: 'Dashboard', to: '/dashboard', icon: '$dashboard' },
+    { title: 'Ideas', to: '/ideas', icon: '$idea' },
+    { title: 'Projects', to: '/projects', icon: '$gantt' },
+    { title: 'API Keys', to: '/api-keys', icon: '$key' },
+    { title: 'Users', to: '/users', icon: '$users' },
+  ]
+  if (auth.isSuperuser) {
+    items.push({ title: 'Audit Logs', to: '/audit-logs', icon: '$activity' })
+  }
+  return items
+})
 
-const title = computed(() => navItems.find((item) => route.path.startsWith(item.to))?.title ?? 'Dashboard')
+const title = computed(() => navItems.value.find((item) => route.path.startsWith(item.to))?.title ?? 'Dashboard')
 const isDark = computed(() => theme.global.current.value.dark)
 
 watch(isDesktopLayout, (desktop) => {

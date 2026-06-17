@@ -16,9 +16,17 @@ from bitnp_ideas.schemas.common import (
     ApiKeyUpdate,
     ApiMessage,
     CurrentUser,
+    Page,
 )
+from bitnp_ideas.security.api_keys import protect_signing_secret
 from bitnp_ideas.security.rbac import get_current_user
-from bitnp_ideas.services.backend import add_audit, utcnow
+from bitnp_ideas.services.backend import (
+    add_audit,
+    normalized_limit,
+    normalized_offset,
+    total_for_statement,
+    utcnow,
+)
 
 router = APIRouter()
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
@@ -49,13 +57,18 @@ async def get_owned_api_key(session: AsyncSession, user: CurrentUser, api_key_id
     return api_key
 
 
-@router.get("", response_model=list[ApiKeyRead])
-async def list_api_keys(user: CurrentUserDep, session: DbSessionDep) -> list[ApiKeyRead]:
+@router.get("", response_model=Page[ApiKeyRead])
+async def list_api_keys(
+    user: CurrentUserDep, session: DbSessionDep, offset: int = 0, limit: int = 50
+) -> Page[ApiKeyRead]:
     statement = select(ApiKey).order_by(ApiKey.created_at.desc())
     if user.global_role != GlobalRole.SUPERUSER:
         statement = statement.where(ApiKey.user_id == user.id)
-    result = await session.scalars(statement)
-    return [read_api_key(api_key) for api_key in result]
+    total = await total_for_statement(session, statement)
+    result = await session.scalars(
+        statement.offset(normalized_offset(offset)).limit(normalized_limit(limit))
+    )
+    return Page(data=[read_api_key(api_key) for api_key in result], total=total)
 
 
 @router.post("", response_model=ApiKeyCreateResponse, status_code=201)
@@ -71,7 +84,7 @@ async def create_api_key(
         user_id=user.id,
         name=payload.name,
         key_id=key_id,
-        secret_hash=signing_secret,
+        secret_hash=protect_signing_secret(signing_secret),
         secret_last4=signing_secret[-4:],
         scopes=payload.scopes,
         allowed_entities=settings.api_keys.allowed_entities,
@@ -151,7 +164,7 @@ async def rotate_api_key(
     api_key = await get_owned_api_key(session, user, api_key_id)
     signing_secret = f"biks_{token_urlsafe(32)}"
     before = {"secret_last4": api_key.secret_last4}
-    api_key.secret_hash = signing_secret
+    api_key.secret_hash = protect_signing_secret(signing_secret)
     api_key.secret_last4 = signing_secret[-4:]
     api_key.is_active = True
     api_key.revoked_at = None

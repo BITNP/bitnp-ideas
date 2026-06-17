@@ -14,6 +14,7 @@ export const useAuthStore = defineStore('auth', {
     isAdmin: (state) =>
       state.user?.global_role === 'superuser' ||
       state.user?.global_role === 'administrator',
+    isSuperuser: (state) => state.user?.global_role === 'superuser',
   },
   actions: {
     async login() {

@@ -56,15 +56,15 @@ onMounted(async () => {
   error.value = null
 
   const [ideasResult, projectsResult] = await Promise.allSettled([
-    ideasApi.list(),
-    projectsApi.list(),
+    ideasApi.list({ offset: 0, limit: 100 }),
+    projectsApi.list({ offset: 0, limit: 100 }),
   ])
 
   if (ideasResult.status === 'fulfilled') {
-    ideas.value = ideasResult.value.data
+    ideas.value = ideasResult.value.data.data
   }
   if (projectsResult.status === 'fulfilled') {
-    projects.value = projectsResult.value.data
+    projects.value = projectsResult.value.data.data
   }
 
   if (projects.value.length > 0) {
@@ -78,7 +78,7 @@ onMounted(async () => {
     const collectedTasks: TaskRead[] = []
     for (const result of taskResults) {
       if (result.status === 'fulfilled') {
-        collectedTasks.push(...result.value.data)
+        collectedTasks.push(...result.value.data.data)
       }
     }
     allTasks.value = collectedTasks
@@ -86,7 +86,7 @@ onMounted(async () => {
     const collectedActivities: ActivityRead[] = []
     for (const result of activityResults) {
       if (result.status === 'fulfilled') {
-        collectedActivities.push(...result.value.data)
+        collectedActivities.push(...result.value.data.data)
       }
     }
     allActivities.value = collectedActivities

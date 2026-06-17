@@ -20,10 +20,9 @@ class ApiMessage(BaseModel):
     message: str
 
 
-class PageMeta(BaseModel):
-    limit: int = 50
-    cursor: str | None = None
-    next_cursor: str | None = None
+class Page[T](BaseModel):
+    data: list[T]
+    total: int
 
 
 class EntityRef(BaseModel):
@@ -275,6 +274,19 @@ class ActivityRead(BaseModel):
     entity_id: str
     before: dict[str, Any] | None = None
     after: dict[str, Any] | None = None
+    created_at: datetime
+
+
+class AuditLogRead(BaseModel):
+    id: str
+    actor_user_id: str | None = None
+    actor_api_key_id: str | None = None
+    action: str
+    entity_type: str
+    entity_id: str | None = None
+    before: dict[str, Any] | None = None
+    after: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
     created_at: datetime
 
 

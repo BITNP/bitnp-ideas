@@ -1099,6 +1099,54 @@ CREATE TABLE external_links (
 
 # 10. API 设计
 
+## 10.0 列表分页
+
+所有返回列表的 GET API 必须支持 offset/limit 分页：
+
+```text
+offset: 从 0 开始的偏移量，默认 0
+limit: 单次返回数量，默认 50，服务端最大 100
+```
+
+所有分页列表统一返回干净的 Page 响应，不再直接返回裸数组，也不额外包 meta：
+
+```json
+{
+  "data": [],
+  "total": 0
+}
+```
+
+`data` 是当前页数据，`total` 是当前过滤条件下的总条数，前端用它计算页数。
+
+示例：
+
+```text
+GET /api/v1/ideas?offset=0&limit=50
+GET /api/v1/projects/{project_id}/tasks?offset=50&limit=50
+GET /api/v1/audit-logs?offset=0&limit=100
+```
+
+前端 API 模块必须暴露 `PaginationParams` 和 `PageResponse<T>`，页面可以先使用默认第一页，后续分页控件必须通过同一组参数推进。
+
+前端分页控件统一使用 Vuetify `v-pagination`，通过 `total / limit` 计算页数；下方分页区域不使用自造分页 card。分页按钮使用方形按钮样式并居中展示，页大小选择可用 Vuetify `v-select`。
+
+当前第一版所有返回列表的 GET 端点均必须使用 `Page<T>` 响应：
+
+- `GET /api/v1/users`
+- `GET /api/v1/ideas`
+- `GET /api/v1/ideas/{idea_id}/history`
+- `GET /api/v1/idea-tags`
+- `GET /api/v1/projects`
+- `GET /api/v1/projects/{project_id}/ideas`
+- `GET /api/v1/projects/{project_id}/tasks`
+- `GET /api/v1/api-keys`
+- `GET /api/v1/projects/{project_id}/activity`
+- `GET /api/v1/{entity_type}/{entity_id}/links`
+- `GET /api/v1/audit-logs`
+
+这些端点不得返回裸数组，也不得使用 `{ items, meta }`、`cursor` 或其他分页包装格式。
+
 ## 10.1 Auth
 
 ```text
@@ -1284,6 +1332,8 @@ DELETE /api/v1/api-keys/{api_key_id}
 POST   /api/v1/api-keys/{api_key_id}/rotate
 ```
 
+`GET /api/v1/api-keys` 支持 `offset` / `limit`，返回 `Page<ApiKeyRead>`。
+
 ------
 
 ## 10.10 Activity
@@ -1298,9 +1348,11 @@ GET /api/v1/projects/{project_id}/activity
 actor_user_id
 action_type
 entity_type
+offset
 limit
-cursor
 ```
+
+返回值为 `Page<ActivityRead>`，即 `{ "data": ActivityRead[], "total": number }`。
 
 ------
 
@@ -1312,6 +1364,8 @@ POST   /api/v1/{entity_type}/{entity_id}/links
 DELETE /api/v1/links/{link_id}
 POST   /api/v1/links/preview
 ```
+
+`GET /api/v1/{entity_type}/{entity_id}/links` 支持 `offset` / `limit`，返回 `Page<ExternalLinkRead>`。
 
 ------
 
@@ -2139,6 +2193,7 @@ Cross-project dependencies
 - 甘特图已接入前后端批量更新、任务依赖创建和删除。
 - Activity Stream 和 Audit Log 写入 helper 已在任务、项目成员、依赖、idea、API Key 等关键动作中使用。
 - 后端配置统一来自 YAML，开发默认配置为 `apps/backend/config.yaml`。
+- API Key signing secret 只在创建/轮换响应中展示一次，数据库中保存 `fernet:v1:` 受保护密文，不保存明文 secret。
 
 ## 22.2 版本化 API 前缀契约
 
@@ -2171,6 +2226,7 @@ OpenAPI path: /ideas
 - external link 的 `entity_type` 只允许单数：`idea`、`project`、`task`。
 - `TaskDependencyCreate.dependency_type` 第一版只允许 `finish_to_start`。
 - `IdeaCreate` 当前后端接收 `tag_names`；如果产品希望用 `tag_ids` 创建 idea，需要先变更后端 schema 和 OpenAPI。
+- 所有列表型 GET API 统一返回 `PageResponse<T>`：`{ data: T[], total: number }`；前端页面只读取 `response.data.data` 渲染当前页，用 `response.data.total` 驱动 Vuetify `v-pagination`。
 
 ## 22.4 当前端点测试覆盖
 
@@ -2195,15 +2251,16 @@ OpenAPI path: /ideas
 - idea 进入 `in_progress/completed` 必须关联 project 或 URL。
 - API Key scope 只能是 `ideas:read` 和 `ideas:write`。
 - API Key 只能访问 idea/tag 相关读写，不得访问 projects/tasks/users/gantt。
+- API Key 创建和轮换后，返回给用户的 secret 不得原样写入数据库，落库值必须是受保护密文。
 - Activity/Audit 写入 JSON 字段前必须进行 JSON-safe 编码，避免 date/enum 无法序列化。
+- 所有列表型 GET 端点必须通过契约测试断言同时暴露 `offset` / `limit` query 参数，并返回 `{ data, total }` Page 响应。
 
 ## 22.5 当前已知偏差与待补项
 
 以下项目尚未达到最终设计，需要后续补齐：
 
-- API Key secret 当前实现仍以可签名明文形式写入 `secret_hash` 字段；最终必须改为不明文存储的方案，并相应调整验签机制。
 - OIDC callback 当前未校验前端持有的 state，JWT 当前未包含 `exp`。
-- Audit Log 已有模型和写入，但没有 `/audit-logs` 查询 API 和前端页面。
+- Audit Log 查询 API 和前端页面已落地，后续需要继续补过滤条件、权限边界和端点测试覆盖。
 - 非 Docker 部署仍缺独立文档，需要补 systemd、nginx、PostgreSQL、配置路径和 migration 流程。
 - Project Detail 已有 tabs，但成员管理、关联 idea 管理、external link 创建/删除、任务详情 drawer 仍需完善。
 - Gantt UI 已支持核心拖动和依赖操作，但 day/week/month 三档视图和任务详情 drawer 仍需补全。
@@ -2214,12 +2271,11 @@ OpenAPI path: /ideas
 
 下一阶段建议按以下顺序推进：
 
-1. 修 API Key secret 存储与验签实现，确保 secret 不以明文或等价明文存储。
-2. 增加 Audit Log 查询 API，只允许 superuser 或受限 administrator 查看。
-3. 建立 OpenAPI -> TypeScript 生成或契约比对脚本，减少前后端类型漂移。
-4. 补 Project Detail 的成员、linked ideas、external links 可操作 UI。
-5. 补 OIDC state 校验、JWT 过期时间和 logout/session 语义。
-6. 补非 Docker 部署文档。
+1. 继续收紧 Audit Log 过滤条件、权限边界和审计查询体验。
+2. 建立 OpenAPI -> TypeScript 生成或契约比对脚本，减少前后端类型漂移。
+3. 补 Project Detail 的成员、linked ideas、external links 可操作 UI。
+4. 补 OIDC state 校验、JWT 过期时间和 logout/session 语义。
+5. 补非 Docker 部署文档。
 
 ------
 

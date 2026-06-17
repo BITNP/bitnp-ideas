@@ -5,8 +5,17 @@ import { VDateInput } from 'vuetify/components/VDateInput'
 
 import GanttBoard from '@/components/GanttBoard.vue'
 import MetricTile from '@/components/MetricTile.vue'
-import { projectsApi, tasksApi, ganttApi, activityApi, linksApi } from '@/api/modules'
-import type { ProjectRead, TaskRead, GanttRead, ActivityRead, IdeaRead, ExternalLinkRead } from '@/types/api'
+import PaginationControls from '@/components/PaginationControls.vue'
+import { projectsApi, tasksApi, ganttApi, activityApi, linksApi, usersApi, ideasApi } from '@/api/modules'
+import type {
+  ProjectRead,
+  TaskRead,
+  GanttRead,
+  ActivityRead,
+  IdeaRead,
+  ExternalLinkRead,
+  CurrentUser,
+} from '@/types/api'
 
 const route = useRoute()
 const projectId = route.params.id as string
@@ -14,35 +23,105 @@ const projectId = route.params.id as string
 const tab = ref(route.name === 'project-gantt' ? 'gantt' : route.name === 'project-activity' ? 'activity' : 'overview')
 
 const project = ref<ProjectRead | null>(null)
-const tasks = ref<Array<TaskRead | GanttRead['tasks'][number]>>([])
+const tasks = ref<TaskRead[]>([])
 const ganttData = ref<GanttRead | null>(null)
 const activities = ref<ActivityRead[]>([])
 const projectIdeas = ref<IdeaRead[]>([])
 const links = ref<ExternalLinkRead[]>([])
+const users = ref<CurrentUser[]>([])
+const ideaOptions = ref<IdeaRead[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+const taskOffset = ref(0)
+const taskLimit = ref(25)
+const taskTotal = ref(0)
+const ideaOffset = ref(0)
+const ideaLimit = ref(25)
+const ideaTotal = ref(0)
+const linkOffset = ref(0)
+const linkLimit = ref(25)
+const linkTotal = ref(0)
+const activityOffset = ref(0)
+const activityLimit = ref(25)
+const activityTotal = ref(0)
 
 const openTaskCount = computed(() => tasks.value.filter((t) => t.status !== 'done').length)
+const memberIds = computed(() => new Set(project.value?.members.map((member) => member.id) ?? []))
+const availableUsers = computed(() => users.value.filter((user) => !memberIds.value.has(user.id)))
+const linkedIdeaIds = computed(() => new Set(projectIdeas.value.map((idea) => idea.id)))
+const availableIdeas = computed(() => ideaOptions.value.filter((idea) => !linkedIdeaIds.value.has(idea.id)))
 
 const addTaskDialog = ref(false)
 const newTaskTitle = ref('')
 const newTaskDescription = ref('')
-const newTaskAssignee = ref('')
+const newTaskAssignee = ref<string | null>(null)
 const taskDateRange = ref<Date[]>([])
+
+const memberDialog = ref(false)
+const selectedMemberId = ref<string | null>(null)
+
+const ideaDialog = ref(false)
+const selectedIdeaId = ref<string | null>(null)
+const selectedIdeaRelation = ref('related')
+
+const linkDialog = ref(false)
+const linkUrl = ref('')
+const linkTitle = ref('')
+const linkDescription = ref('')
+const linkType = ref('website')
+
+const taskDrawer = ref(false)
+const selectedTask = ref<TaskRead | null>(null)
+const taskTitle = ref('')
+const taskDescription = ref('')
+const taskStatus = ref('todo')
+const taskAssigneeId = ref<string | null>(null)
+const taskStartDate = ref<Date | null>(null)
+const taskEndDate = ref<Date | null>(null)
+const taskProgress = ref(0)
 
 const settingsName = ref('')
 const settingsStatus = ref('')
 const settingsDescription = ref('')
 
+const taskStatuses = ['todo', 'in_progress', 'blocked', 'review', 'done', 'cancelled']
+const ideaRelations = ['related', 'origin', 'inspired_by']
+const linkTypes = ['website', 'github_repo', 'doc', 'other']
+
+function dateFromString(value: string | null) {
+  return value ? new Date(`${value}T00:00:00`) : null
+}
+
+function dateToString(value: Date | null) {
+  return value ? value.toISOString().slice(0, 10) : null
+}
+
+function applyProject(value: ProjectRead) {
+  project.value = value
+  settingsName.value = value.name
+  settingsStatus.value = value.status
+  settingsDescription.value = value.description ?? ''
+}
+
+async function fetchProject() {
+  const res = await projectsApi.get(projectId)
+  applyProject(res.data)
+}
+
+async function fetchReferenceData() {
+  const [usersRes, ideasRes] = await Promise.all([
+    usersApi.list({ offset: 0, limit: 100 }),
+    ideasApi.list({ offset: 0, limit: 100 }),
+  ])
+  users.value = usersRes.data.data
+  ideaOptions.value = ideasRes.data.data
+}
+
 onMounted(async () => {
   loading.value = true
   error.value = null
   try {
-    const res = await projectsApi.get(projectId)
-    project.value = res.data
-    settingsName.value = res.data.name
-    settingsStatus.value = res.data.status
-    settingsDescription.value = res.data.description ?? ''
+    await Promise.all([fetchProject(), fetchReferenceData()])
   } catch {
     error.value = 'Failed to load project.'
     loading.value = false
@@ -50,8 +129,9 @@ onMounted(async () => {
   }
 
   try {
-    const res = await tasksApi.list(projectId)
-    tasks.value = res.data
+    const res = await tasksApi.list(projectId, { offset: taskOffset.value, limit: taskLimit.value })
+    tasks.value = res.data.data
+    taskTotal.value = res.data.total
   } catch {
     // tasks are optional for overview display
   }
@@ -71,7 +151,7 @@ onMounted(async () => {
 
 watch(tab, (newTab) => {
   if (newTab === 'tasks' && tasks.value.length === 0) {
-    tasksApi.list(projectId).then((res) => { tasks.value = res.data }).catch(() => {})
+    fetchTasks()
   } else if (newTab === 'gantt' && !ganttData.value) {
     fetchGantt()
   } else if (newTab === 'activity' && activities.value.length === 0) {
@@ -83,24 +163,43 @@ watch(tab, (newTab) => {
   }
 })
 
-async function fetchActivities() {
+async function fetchTasks(offset = taskOffset.value, limit = taskLimit.value) {
   try {
-    const res = await activityApi.list(projectId)
-    activities.value = res.data
+    const res = await tasksApi.list(projectId, { offset, limit })
+    tasks.value = res.data.data
+    taskTotal.value = res.data.total
+    taskOffset.value = offset
+    taskLimit.value = limit
   } catch { /* empty */ }
 }
 
-async function fetchIdeas() {
+async function fetchActivities(offset = activityOffset.value, limit = activityLimit.value) {
   try {
-    const res = await projectsApi.listIdeas(projectId)
-    projectIdeas.value = res.data
+    const res = await activityApi.list(projectId, { offset, limit })
+    activities.value = res.data.data
+    activityTotal.value = res.data.total
+    activityOffset.value = offset
+    activityLimit.value = limit
   } catch { /* empty */ }
 }
 
-async function fetchLinks() {
+async function fetchIdeas(offset = ideaOffset.value, limit = ideaLimit.value) {
   try {
-    const res = await linksApi.list('project', projectId)
-    links.value = res.data
+    const res = await projectsApi.listIdeas(projectId, { offset, limit })
+    projectIdeas.value = res.data.data
+    ideaTotal.value = res.data.total
+    ideaOffset.value = offset
+    ideaLimit.value = limit
+  } catch { /* empty */ }
+}
+
+async function fetchLinks(offset = linkOffset.value, limit = linkLimit.value) {
+  try {
+    const res = await linksApi.list('project', projectId, { offset, limit })
+    links.value = res.data.data
+    linkTotal.value = res.data.total
+    linkOffset.value = offset
+    linkLimit.value = limit
   } catch { /* empty */ }
 }
 
@@ -108,10 +207,21 @@ async function fetchGantt() {
   try {
     const res = await ganttApi.get(projectId)
     ganttData.value = res.data
-    tasks.value = res.data.tasks
   } catch {
     ganttData.value = null
   }
+}
+
+function openTask(task: TaskRead) {
+  selectedTask.value = task
+  taskTitle.value = task.title
+  taskDescription.value = task.description ?? ''
+  taskStatus.value = task.status
+  taskAssigneeId.value = task.assignee?.id ?? null
+  taskStartDate.value = dateFromString(task.start_date)
+  taskEndDate.value = dateFromString(task.end_date)
+  taskProgress.value = task.progress
+  taskDrawer.value = true
 }
 
 async function handleAddTask() {
@@ -128,13 +238,128 @@ async function handleAddTask() {
     addTaskDialog.value = false
     newTaskTitle.value = ''
     newTaskDescription.value = ''
-    newTaskAssignee.value = ''
+    newTaskAssignee.value = null
     taskDateRange.value = []
+    await fetchTasks(0, taskLimit.value)
     if (ganttData.value) {
       fetchGantt()
     }
   } catch {
     error.value = 'Failed to create task.'
+  }
+}
+
+async function handleSaveTask() {
+  if (!selectedTask.value || !taskTitle.value) return
+  try {
+    const res = await tasksApi.update(selectedTask.value.id, {
+      title: taskTitle.value,
+      description: taskDescription.value || undefined,
+      status: taskStatus.value,
+      assignee_id: taskAssigneeId.value,
+      start_date: dateToString(taskStartDate.value),
+      end_date: dateToString(taskEndDate.value),
+      progress: taskProgress.value,
+      version: selectedTask.value.version,
+    })
+    const idx = tasks.value.findIndex((task) => task.id === res.data.id)
+    if (idx !== -1) tasks.value[idx] = res.data
+    selectedTask.value = res.data
+    openTask(res.data)
+    if (ganttData.value) fetchGantt()
+    fetchActivities(activityOffset.value, activityLimit.value)
+  } catch {
+    error.value = 'Failed to update task.'
+  }
+}
+
+async function handleArchiveTask() {
+  if (!selectedTask.value) return
+  try {
+    await tasksApi.delete(selectedTask.value.id)
+    taskDrawer.value = false
+    selectedTask.value = null
+    await fetchTasks(taskOffset.value, taskLimit.value)
+    if (ganttData.value) fetchGantt()
+    fetchActivities(activityOffset.value, activityLimit.value)
+  } catch {
+    error.value = 'Failed to archive task.'
+  }
+}
+
+async function handleAddMember() {
+  if (!selectedMemberId.value) return
+  try {
+    await projectsApi.addMember(projectId, selectedMemberId.value)
+    selectedMemberId.value = null
+    memberDialog.value = false
+    await fetchProject()
+    fetchActivities(activityOffset.value, activityLimit.value)
+  } catch {
+    error.value = 'Failed to add project member.'
+  }
+}
+
+async function handleRemoveMember(userId: string) {
+  try {
+    await projectsApi.removeMember(projectId, userId)
+    await fetchProject()
+    fetchActivities(activityOffset.value, activityLimit.value)
+  } catch {
+    error.value = 'Failed to remove project member.'
+  }
+}
+
+async function handleLinkIdea() {
+  if (!selectedIdeaId.value) return
+  try {
+    await projectsApi.addIdea(projectId, selectedIdeaId.value, selectedIdeaRelation.value)
+    selectedIdeaId.value = null
+    selectedIdeaRelation.value = 'related'
+    ideaDialog.value = false
+    await fetchIdeas(0, ideaLimit.value)
+    fetchActivities(activityOffset.value, activityLimit.value)
+  } catch {
+    error.value = 'Failed to link idea.'
+  }
+}
+
+async function handleUnlinkIdea(ideaId: string) {
+  try {
+    await projectsApi.removeIdea(projectId, ideaId)
+    await fetchIdeas(ideaOffset.value, ideaLimit.value)
+    fetchActivities(activityOffset.value, activityLimit.value)
+  } catch {
+    error.value = 'Failed to unlink idea.'
+  }
+}
+
+async function handleCreateLink() {
+  if (!linkUrl.value) return
+  try {
+    await linksApi.create('project', projectId, {
+      url: linkUrl.value,
+      title: linkTitle.value || undefined,
+      description: linkDescription.value || undefined,
+      link_type: linkType.value,
+    })
+    linkDialog.value = false
+    linkUrl.value = ''
+    linkTitle.value = ''
+    linkDescription.value = ''
+    linkType.value = 'website'
+    await fetchLinks(0, linkLimit.value)
+  } catch {
+    error.value = 'Failed to create link.'
+  }
+}
+
+async function handleDeleteLink(linkId: string) {
+  try {
+    await linksApi.delete(linkId)
+    await fetchLinks(linkOffset.value, linkLimit.value)
+  } catch {
+    error.value = 'Failed to delete link.'
   }
 }
 
@@ -146,7 +371,7 @@ async function handleSaveSettings() {
       status: settingsStatus.value,
       description: settingsDescription.value,
     })
-    project.value = res.data
+    applyProject(res.data)
   } catch {
     error.value = 'Failed to update project settings.'
   }
@@ -170,7 +395,10 @@ function handleGanttError(message: string) {
           <div class="text-caption text-medium-emphasis">{{ project.key }}</div>
           <h1 class="text-h5 mb-1">{{ project.name }}</h1>
         </div>
-        <v-btn color="primary" prepend-icon="$plus" @click="addTaskDialog = true">Add task</v-btn>
+        <div class="d-flex flex-wrap ga-2 justify-end">
+          <v-btn color="primary" prepend-icon="$plus" @click="addTaskDialog = true">Add task</v-btn>
+          <v-btn variant="tonal" prepend-icon="$users" @click="memberDialog = true">Add member</v-btn>
+        </div>
       </div>
 
       <v-tabs v-model="tab" class="mb-4">
@@ -201,19 +429,33 @@ function handleGanttError(message: string) {
                   :title="task.title"
                   :subtitle="`${task.assignee?.name ?? '—'} · ${task.status}`"
                   prepend-icon="$calendar"
+                  @click="openTask(task)"
                 />
               </v-list>
               <v-card-text v-else class="text-medium-emphasis">No tasks yet.</v-card-text>
             </v-card>
             <v-card border flat>
-              <v-card-title>Members</v-card-title>
+              <v-card-title class="d-flex align-center">
+                <span>Members</span>
+                <v-spacer />
+                <v-btn icon="$plus" variant="text" size="small" @click="memberDialog = true" />
+              </v-card-title>
               <v-list v-if="project.members.length">
                 <v-list-item
                   v-for="member in project.members"
                   :key="member.id"
                   :title="member.name"
                   prepend-icon="$account"
-                />
+                >
+                  <template #append>
+                    <v-btn
+                      icon="$delete"
+                      variant="text"
+                      size="small"
+                      @click.stop="handleRemoveMember(member.id)"
+                    />
+                  </template>
+                </v-list-item>
               </v-list>
               <v-card-text v-else class="text-medium-emphasis">No members yet.</v-card-text>
             </v-card>
@@ -232,10 +474,10 @@ function handleGanttError(message: string) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="task in tasks" :key="task.id">
+                <tr v-for="task in tasks" :key="task.id" class="table-row-action" @click="openTask(task)">
                   <td>{{ task.title }}</td>
                   <td>{{ task.assignee?.name ?? '—' }}</td>
-                  <td>{{ task.status }}</td>
+                  <td><v-chip size="small" color="primary" variant="tonal">{{ task.status }}</v-chip></td>
                   <td><v-slider :model-value="task.progress" hide-details density="compact" readonly /></td>
                 </tr>
               </tbody>
@@ -244,6 +486,12 @@ function handleGanttError(message: string) {
           <v-card v-else border flat>
             <v-card-text class="text-medium-emphasis">No tasks yet.</v-card-text>
           </v-card>
+          <PaginationControls
+            :offset="taskOffset"
+            :limit="taskLimit"
+            :total="taskTotal"
+            @page-change="(page) => fetchTasks(page.offset, page.limit)"
+          />
         </v-window-item>
 
         <v-window-item value="gantt">
@@ -261,6 +509,9 @@ function handleGanttError(message: string) {
         </v-window-item>
 
         <v-window-item value="ideas">
+          <div class="d-flex justify-end mb-3">
+            <v-btn color="primary" variant="tonal" prepend-icon="$plus" @click="ideaDialog = true">Link idea</v-btn>
+          </div>
           <v-card v-if="projectIdeas.length" border flat>
             <v-list lines="two">
               <v-list-item
@@ -269,15 +520,33 @@ function handleGanttError(message: string) {
                 :title="idea.title"
                 :subtitle="idea.status"
                 prepend-icon="$idea"
-              />
+              >
+                <template #append>
+                  <v-btn
+                    icon="$delete"
+                    variant="text"
+                    size="small"
+                    @click.stop="handleUnlinkIdea(idea.id)"
+                  />
+                </template>
+              </v-list-item>
             </v-list>
           </v-card>
           <v-card v-else border flat>
             <v-card-text class="text-medium-emphasis">No linked ideas yet.</v-card-text>
           </v-card>
+          <PaginationControls
+            :offset="ideaOffset"
+            :limit="ideaLimit"
+            :total="ideaTotal"
+            @page-change="(page) => fetchIdeas(page.offset, page.limit)"
+          />
         </v-window-item>
 
         <v-window-item value="links">
+          <div class="d-flex justify-end mb-3">
+            <v-btn color="primary" variant="tonal" prepend-icon="$plus" @click="linkDialog = true">Add link</v-btn>
+          </div>
           <v-card v-if="links.length" border flat>
             <v-list>
               <v-list-item
@@ -288,12 +557,27 @@ function handleGanttError(message: string) {
                 prepend-icon="$link"
                 :href="link.url"
                 target="_blank"
-              />
+              >
+                <template #append>
+                  <v-btn
+                    icon="$delete"
+                    variant="text"
+                    size="small"
+                    @click.prevent.stop="handleDeleteLink(link.id)"
+                  />
+                </template>
+              </v-list-item>
             </v-list>
           </v-card>
           <v-card v-else border flat>
             <v-card-text class="text-medium-emphasis">No links yet.</v-card-text>
           </v-card>
+          <PaginationControls
+            :offset="linkOffset"
+            :limit="linkLimit"
+            :total="linkTotal"
+            @page-change="(page) => fetchLinks(page.offset, page.limit)"
+          />
         </v-window-item>
 
         <v-window-item value="activity">
@@ -315,6 +599,12 @@ function handleGanttError(message: string) {
           <v-card v-else border flat>
             <v-card-text class="text-medium-emphasis">No activity yet.</v-card-text>
           </v-card>
+          <PaginationControls
+            :offset="activityOffset"
+            :limit="activityLimit"
+            :total="activityTotal"
+            @page-change="(page) => fetchActivities(page.offset, page.limit)"
+          />
         </v-window-item>
 
         <v-window-item value="settings">
@@ -344,7 +634,14 @@ function handleGanttError(message: string) {
         <v-card-text>
           <v-text-field v-model="newTaskTitle" label="Title" />
           <v-textarea v-model="newTaskDescription" label="Description" rows="3" />
-          <v-text-field v-model="newTaskAssignee" label="Assignee" />
+          <v-autocomplete
+            v-model="newTaskAssignee"
+            :items="project.members"
+            item-title="name"
+            item-value="id"
+            label="Assignee"
+            clearable
+          />
           <v-date-input v-model="taskDateRange" label="Date range" multiple="range" clearable />
         </v-card-text>
         <v-card-actions>
@@ -354,5 +651,106 @@ function handleGanttError(message: string) {
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <v-dialog v-model="memberDialog" max-width="480">
+      <v-card title="Add Member">
+        <v-card-text>
+          <v-autocomplete
+            v-model="selectedMemberId"
+            :items="availableUsers"
+            item-title="display_name"
+            item-value="id"
+            label="User"
+            clearable
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="memberDialog = false">Cancel</v-btn>
+          <v-btn color="primary" variant="tonal" :disabled="!selectedMemberId" @click="handleAddMember">Add</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="ideaDialog" max-width="520">
+      <v-card title="Link Idea">
+        <v-card-text>
+          <v-autocomplete
+            v-model="selectedIdeaId"
+            :items="availableIdeas"
+            item-title="title"
+            item-value="id"
+            label="Idea"
+            clearable
+          />
+          <v-select v-model="selectedIdeaRelation" :items="ideaRelations" label="Relation" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="ideaDialog = false">Cancel</v-btn>
+          <v-btn color="primary" variant="tonal" :disabled="!selectedIdeaId" @click="handleLinkIdea">Link</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="linkDialog" max-width="560">
+      <v-card title="Add Link">
+        <v-card-text>
+          <v-text-field v-model="linkUrl" label="URL" prepend-inner-icon="$link" />
+          <v-text-field v-model="linkTitle" label="Title" />
+          <v-textarea v-model="linkDescription" label="Description" rows="3" />
+          <v-select v-model="linkType" :items="linkTypes" label="Type" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="linkDialog = false">Cancel</v-btn>
+          <v-btn color="primary" variant="tonal" :disabled="!linkUrl" @click="handleCreateLink">Create</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-navigation-drawer v-model="taskDrawer" temporary location="right" width="460">
+      <template v-if="selectedTask">
+        <v-toolbar flat>
+          <v-toolbar-title>Task detail</v-toolbar-title>
+          <v-btn icon="$delete" variant="text" @click="handleArchiveTask" />
+          <v-btn icon="$close" variant="text" @click="taskDrawer = false" />
+        </v-toolbar>
+        <div class="pa-4">
+          <v-text-field v-model="taskTitle" label="Title" />
+          <v-textarea v-model="taskDescription" label="Description" rows="3" />
+          <v-select v-model="taskStatus" :items="taskStatuses" label="Status" />
+          <v-autocomplete
+            v-model="taskAssigneeId"
+            :items="project?.members ?? []"
+            item-title="name"
+            item-value="id"
+            label="Assignee"
+            clearable
+          />
+          <div class="d-flex ga-3">
+            <v-date-input v-model="taskStartDate" label="Start" clearable />
+            <v-date-input v-model="taskEndDate" label="End" clearable />
+          </div>
+          <v-slider
+            v-model="taskProgress"
+            label="Progress"
+            min="0"
+            max="100"
+            step="5"
+            thumb-label
+          />
+          <v-btn
+            block
+            color="primary"
+            variant="tonal"
+            :disabled="!taskTitle"
+            @click="handleSaveTask"
+          >
+            Save task
+          </v-btn>
+        </div>
+      </template>
+    </v-navigation-drawer>
   </div>
 </template>

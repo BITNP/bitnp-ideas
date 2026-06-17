@@ -16,10 +16,18 @@ from bitnp_ideas.schemas.common import (
     IdeaStatusUpdate,
     IdeaTagAttach,
     IdeaUpdate,
+    Page,
 )
 from bitnp_ideas.security.api_keys import scope_allowed
 from bitnp_ideas.security.rbac import AuthContext, get_auth_context
-from bitnp_ideas.services.backend import add_audit, serialize_idea, utcnow
+from bitnp_ideas.services.backend import (
+    add_audit,
+    normalized_limit,
+    normalized_offset,
+    serialize_idea,
+    total_for_statement,
+    utcnow,
+)
 
 router = APIRouter()
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
@@ -78,14 +86,16 @@ def validate_status_link(
         )
 
 
-@router.get("", response_model=list[IdeaRead])
+@router.get("", response_model=Page[IdeaRead])
 async def list_ideas(
     context: AuthDep,
     session: DbSessionDep,
     status: str | None = None,
     tag: str | None = None,
     search: str | None = None,
-) -> list[IdeaRead]:
+    offset: int = 0,
+    limit: int = 50,
+) -> Page[IdeaRead]:
     ensure_idea_read(context)
     statement = select(Idea).where(Idea.archived_at.is_(None)).order_by(Idea.updated_at.desc())
     if status:
@@ -94,8 +104,11 @@ async def list_ideas(
         statement = statement.where(Idea.tags.any(IdeaTag.slug == tag))
     if search:
         statement = statement.where(Idea.title.ilike(f"%{search}%"))
-    results = await session.scalars(statement)
-    return [await serialize_idea(session, idea) for idea in results]
+    total = await total_for_statement(session, statement)
+    results = await session.scalars(
+        statement.offset(normalized_offset(offset)).limit(normalized_limit(limit))
+    )
+    return Page(data=[await serialize_idea(session, idea) for idea in results], total=total)
 
 
 @router.post("", response_model=IdeaRead, status_code=201)
@@ -261,19 +274,27 @@ async def update_idea_status(
     return ApiMessage(message=f"idea {idea_id} status changed to {payload.status}")
 
 
-@router.get("/{idea_id}/history", response_model=list[IdeaStatusHistoryRead])
+@router.get("/{idea_id}/history", response_model=Page[IdeaStatusHistoryRead])
 async def get_idea_history(
     idea_id: str,
     context: AuthDep,
     session: DbSessionDep,
-) -> list[IdeaStatusHistoryRead]:
+    offset: int = 0,
+    limit: int = 50,
+) -> Page[IdeaStatusHistoryRead]:
     ensure_idea_read(context)
-    result = await session.scalars(
+    statement = (
         select(IdeaStatusHistory)
         .where(IdeaStatusHistory.idea_id == idea_id)
         .order_by(IdeaStatusHistory.created_at.desc())
     )
-    return [IdeaStatusHistoryRead.model_validate(item) for item in result]
+    total = await total_for_statement(session, statement)
+    result = await session.scalars(
+        statement
+        .offset(normalized_offset(offset))
+        .limit(normalized_limit(limit))
+    )
+    return Page(data=[IdeaStatusHistoryRead.model_validate(item) for item in result], total=total)
 
 
 @router.post("/{idea_id}/tags", response_model=ApiMessage)

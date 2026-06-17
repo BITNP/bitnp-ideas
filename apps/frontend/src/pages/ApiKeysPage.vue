@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { apiKeysApi } from '@/api/modules'
+import PaginationControls from '@/components/PaginationControls.vue'
 import type { ApiKeyRead } from '@/types/api'
 
 const keys = ref<ApiKeyRead[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+const pageOffset = ref(0)
+const pageLimit = ref(25)
+const pageTotal = ref(0)
 
 const createDialog = ref(false)
 const createName = ref('')
@@ -14,18 +18,27 @@ const createScopes = ref('')
 const deleteDialog = ref(false)
 const deleteTarget = ref<ApiKeyRead | null>(null)
 
-onMounted(async () => {
+async function fetchKeys(offset = pageOffset.value, limit = pageLimit.value) {
   loading.value = true
   error.value = null
   try {
-    const res = await apiKeysApi.list()
-    keys.value = res.data
+    const res = await apiKeysApi.list({ offset, limit })
+    keys.value = res.data.data
+    pageTotal.value = res.data.total
+    pageOffset.value = offset
+    pageLimit.value = limit
   } catch {
     error.value = 'Failed to load API keys.'
   } finally {
     loading.value = false
   }
-})
+}
+
+function handlePageChange(page: { offset: number; limit: number }) {
+  fetchKeys(page.offset, page.limit)
+}
+
+onMounted(fetchKeys)
 
 function openCreateDialog() {
   createName.value = ''
@@ -40,6 +53,10 @@ async function handleCreate() {
       scopes: createScopes.value ? createScopes.value.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
     })
     keys.value.unshift(res.data.api_key)
+    if (keys.value.length > pageLimit.value) {
+      keys.value = keys.value.slice(0, pageLimit.value)
+    }
+    pageTotal.value += 1
     createDialog.value = false
   } catch {
     error.value = 'Failed to create API key.'
@@ -67,7 +84,7 @@ async function handleConfirmDelete() {
   if (!target) return
   try {
     await apiKeysApi.delete(target.id)
-    keys.value = keys.value.filter((k) => k.id !== target.id)
+    await fetchKeys(pageOffset.value, pageLimit.value)
     deleteDialog.value = false
     deleteTarget.value = null
   } catch {
@@ -144,6 +161,14 @@ async function handleConfirmDelete() {
         </tbody>
       </v-table>
     </v-card>
+
+    <PaginationControls
+      :offset="pageOffset"
+      :limit="pageLimit"
+      :total="pageTotal"
+      :loading="loading"
+      @page-change="handlePageChange"
+    />
 
     <v-dialog v-model="createDialog" max-width="520">
       <v-card title="Create API Key">

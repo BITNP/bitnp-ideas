@@ -7,9 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bitnp_ideas.db.session import get_db_session
 from bitnp_ideas.models.entities import User
 from bitnp_ideas.models.enums import GlobalRole
-from bitnp_ideas.schemas.common import ApiMessage, CurrentUser
+from bitnp_ideas.schemas.common import ApiMessage, CurrentUser, Page
 from bitnp_ideas.security.rbac import require_roles
-from bitnp_ideas.services.backend import add_audit, ensure_user_can_manage_user, utcnow
+from bitnp_ideas.services.backend import (
+    add_audit,
+    ensure_user_can_manage_user,
+    normalized_limit,
+    normalized_offset,
+    total_for_statement,
+    utcnow,
+)
 
 router = APIRouter()
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
@@ -19,10 +26,16 @@ UserAdminDep = Annotated[
 ]
 
 
-@router.get("", response_model=list[CurrentUser])
-async def list_users(_: UserAdminDep, session: DbSessionDep) -> list[CurrentUser]:
-    result = await session.scalars(select(User).order_by(User.display_name))
-    return [CurrentUser.model_validate(user) for user in result]
+@router.get("", response_model=Page[CurrentUser])
+async def list_users(
+    _: UserAdminDep, session: DbSessionDep, offset: int = 0, limit: int = 50
+) -> Page[CurrentUser]:
+    statement = select(User).order_by(User.display_name)
+    total = await total_for_statement(session, statement)
+    result = await session.scalars(
+        statement.offset(normalized_offset(offset)).limit(normalized_limit(limit))
+    )
+    return Page(data=[CurrentUser.model_validate(user) for user in result], total=total)
 
 
 @router.get("/{user_id}", response_model=CurrentUser)

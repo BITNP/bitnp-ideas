@@ -13,9 +13,16 @@ from bitnp_ideas.schemas.common import (
     ExternalLinkCreate,
     ExternalLinkRead,
     LinkPreview,
+    Page,
 )
 from bitnp_ideas.security.rbac import get_current_user
-from bitnp_ideas.services.backend import add_audit, utcnow
+from bitnp_ideas.services.backend import (
+    add_audit,
+    normalized_limit,
+    normalized_offset,
+    total_for_statement,
+    utcnow,
+)
 
 router = APIRouter()
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
@@ -47,20 +54,28 @@ def read_link(link: ExternalLink) -> ExternalLinkRead:
     )
 
 
-@router.get("/{entity_type}/{entity_id}/links", response_model=list[ExternalLinkRead])
+@router.get("/{entity_type}/{entity_id}/links", response_model=Page[ExternalLinkRead])
 async def list_links(
     entity_type: str,
     entity_id: str,
     _: CurrentUserDep,
     session: DbSessionDep,
-) -> list[ExternalLinkRead]:
+    offset: int = 0,
+    limit: int = 50,
+) -> Page[ExternalLinkRead]:
     parsed_type = parse_entity_type(entity_type)
-    result = await session.scalars(
+    statement = (
         select(ExternalLink)
         .where(ExternalLink.entity_type == parsed_type, ExternalLink.entity_id == entity_id)
         .order_by(ExternalLink.created_at.desc())
     )
-    return [read_link(link) for link in result]
+    total = await total_for_statement(session, statement)
+    result = await session.scalars(
+        statement
+        .offset(normalized_offset(offset))
+        .limit(normalized_limit(limit))
+    )
+    return Page(data=[read_link(link) for link in result], total=total)
 
 
 @router.post("/{entity_type}/{entity_id}/links", response_model=ExternalLinkRead, status_code=201)

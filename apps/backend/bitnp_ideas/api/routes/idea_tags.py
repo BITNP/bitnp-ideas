@@ -13,10 +13,18 @@ from bitnp_ideas.schemas.common import (
     IdeaTagCreate,
     IdeaTagRead,
     IdeaTagUpdate,
+    Page,
 )
 from bitnp_ideas.security.api_keys import scope_allowed
 from bitnp_ideas.security.rbac import AuthContext, get_auth_context, require_roles
-from bitnp_ideas.services.backend import add_audit, serialize_tag, slugify, utcnow
+from bitnp_ideas.services.backend import (
+    add_audit,
+    normalized_limit,
+    normalized_offset,
+    serialize_tag,
+    slugify,
+    utcnow,
+)
 
 router = APIRouter()
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
@@ -26,15 +34,20 @@ TagAdminDep = Annotated[
 ]
 
 
-@router.get("", response_model=list[IdeaTagRead])
-async def list_tags(context: AuthDep, session: DbSessionDep) -> list[IdeaTagRead]:
+@router.get("", response_model=Page[IdeaTagRead])
+async def list_tags(
+    context: AuthDep, session: DbSessionDep, offset: int = 0, limit: int = 50
+) -> Page[IdeaTagRead]:
     if context.api_key and not scope_allowed(context.api_key, "ideas:read"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="API key lacks ideas:read."
         )
     result = await session.scalars(select(IdeaTag).order_by(IdeaTag.name))
     tags = [await serialize_tag(session, tag) for tag in result]
-    return sorted(tags, key=lambda item: (-item.usage_count, item.name))
+    sorted_tags = sorted(tags, key=lambda item: (-item.usage_count, item.name))
+    start = normalized_offset(offset)
+    stop = start + normalized_limit(limit)
+    return Page(data=sorted_tags[start:stop], total=len(sorted_tags))
 
 
 @router.post("", response_model=IdeaTagRead, status_code=201)

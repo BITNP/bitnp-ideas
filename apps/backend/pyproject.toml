@@ -14,6 +14,7 @@ dependencies = [
   "python-multipart>=0.0.20",
   "pyyaml>=6.0.3",
   "sqlalchemy>=2.0.45",
+  "cryptography>=49.0.0",
 ]
 
 [dependency-groups]

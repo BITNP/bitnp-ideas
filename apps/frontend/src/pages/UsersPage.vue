@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { usersApi } from '@/api/modules'
+import PaginationControls from '@/components/PaginationControls.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { CurrentUser } from '@/types/api'
 
@@ -9,6 +10,9 @@ const auth = useAuthStore()
 const users = ref<CurrentUser[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+const pageOffset = ref(0)
+const pageLimit = ref(25)
+const pageTotal = ref(0)
 
 const roleDialog = ref(false)
 const roleUserId = ref<string | null>(null)
@@ -21,18 +25,27 @@ function roleColor(role: string) {
   return map[role] || 'default'
 }
 
-onMounted(async () => {
+async function fetchUsers(offset = pageOffset.value, limit = pageLimit.value) {
   loading.value = true
   error.value = null
   try {
-    const res = await usersApi.list()
-    users.value = res.data
+    const res = await usersApi.list({ offset, limit })
+    users.value = res.data.data
+    pageTotal.value = res.data.total
+    pageOffset.value = offset
+    pageLimit.value = limit
   } catch {
     error.value = 'Failed to load users.'
   } finally {
     loading.value = false
   }
-})
+}
+
+function handlePageChange(page: { offset: number; limit: number }) {
+  fetchUsers(page.offset, page.limit)
+}
+
+onMounted(fetchUsers)
 
 function openRoleDialog(user: CurrentUser) {
   roleUserId.value = user.id
@@ -126,6 +139,14 @@ async function handleActiveChange(user: CurrentUser, value: boolean | null) {
         </tbody>
       </v-table>
     </v-card>
+
+    <PaginationControls
+      :offset="pageOffset"
+      :limit="pageLimit"
+      :total="pageTotal"
+      :loading="loading"
+      @page-change="handlePageChange"
+    />
 
     <v-dialog v-model="roleDialog" max-width="400">
       <v-card title="Change Role">

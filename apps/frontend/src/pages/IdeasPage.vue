@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 import { ideasApi, tagsApi } from '@/api/modules'
+import PaginationControls from '@/components/PaginationControls.vue'
 import type { IdeaRead, TagRead } from '@/types/api'
 
 const ideas = ref<IdeaRead[]>([])
 const tags = ref<TagRead[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+const pageOffset = ref(0)
+const pageLimit = ref(25)
+const pageTotal = ref(0)
 
 const query = ref('')
 const selectedStatus = ref<string | null>(null)
@@ -21,29 +25,56 @@ const createDescription = ref('')
 const createPriority = ref('medium')
 const createTagIds = ref<string[]>([])
 
-const filteredIdeas = computed(() =>
-  ideas.value.filter((idea) => {
-    const matchesQuery = !query.value || idea.title.toLowerCase().includes(query.value.toLowerCase())
-    const matchesStatus = !selectedStatus.value || idea.status === selectedStatus.value
-    const matchesTag = !selectedTag.value || idea.tags.some((tag) => tag.slug === selectedTag.value)
-    return matchesQuery && matchesStatus && matchesTag
-  }),
-)
+const filteredIdeas = computed(() => ideas.value)
 
 const activeIdea = computed(() => ideas.value.find((idea) => idea.id === activeIdeaId.value))
 
-onMounted(async () => {
+async function fetchIdeas(offset = pageOffset.value, limit = pageLimit.value) {
   loading.value = true
   error.value = null
   try {
-    const [ideasRes, tagsRes] = await Promise.all([ideasApi.list(), tagsApi.list()])
-    ideas.value = ideasRes.data
-    tags.value = tagsRes.data
+    const res = await ideasApi.list({
+      offset,
+      limit,
+      status: selectedStatus.value ?? undefined,
+      tag: selectedTag.value ?? undefined,
+      search: query.value || undefined,
+    })
+    ideas.value = res.data.data
+    pageTotal.value = res.data.total
+    pageOffset.value = offset
+    pageLimit.value = limit
   } catch {
     error.value = 'Failed to load ideas. Please try again.'
   } finally {
     loading.value = false
   }
+}
+
+function handlePageChange(page: { offset: number; limit: number }) {
+  fetchIdeas(page.offset, page.limit)
+}
+
+onMounted(async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const [ideasRes, tagsRes] = await Promise.all([
+      ideasApi.list({ offset: pageOffset.value, limit: pageLimit.value }),
+      tagsApi.list({ offset: 0, limit: 100 }),
+    ])
+    ideas.value = ideasRes.data.data
+    pageTotal.value = ideasRes.data.total
+    tags.value = tagsRes.data.data
+  } catch {
+    error.value = 'Failed to load ideas. Please try again.'
+  } finally {
+    loading.value = false
+  }
+})
+
+watch([query, selectedStatus, selectedTag], () => {
+  fetchIdeas(0, pageLimit.value)
 })
 
 function openIdea(id: string) {
@@ -83,6 +114,11 @@ async function handleCreate() {
         : undefined,
     })
     ideas.value.unshift(res.data)
+    if (ideas.value.length > pageLimit.value) {
+      ideas.value = ideas.value.slice(0, pageLimit.value)
+    }
+    pageTotal.value += 1
+    pageOffset.value = 0
     createDialog.value = false
     createTitle.value = ''
     createDescription.value = ''
@@ -152,6 +188,14 @@ async function handleCreate() {
         </v-card>
       </v-col>
     </v-row>
+
+    <PaginationControls
+      :offset="pageOffset"
+      :limit="pageLimit"
+      :total="pageTotal"
+      :loading="loading"
+      @page-change="handlePageChange"
+    />
 
     <v-navigation-drawer v-model="drawer" temporary location="right" width="420">
       <template v-if="activeIdea">

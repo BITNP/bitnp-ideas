@@ -3,6 +3,16 @@ export interface ApiMessage {
   message: string
 }
 
+export interface PaginationParams {
+  offset?: number
+  limit?: number
+}
+
+export interface PageResponse<T> {
+  data: T[]
+  total: number
+}
+
 export interface EntityRef {
   id: string
   name: string
@@ -86,6 +96,18 @@ export interface IdeaStatusUpdate {
   note?: string
   linked_project_id?: string
   linked_project_url?: string
+}
+
+export interface IdeaStatusHistoryRead {
+  id: string
+  idea_id: string
+  from_status: string | null
+  to_status: string
+  actor_id: string | null
+  note: string | null
+  linked_project_id: string | null
+  linked_project_url: string | null
+  created_at: string
 }
 
 // ── Projects ────────────────────────────────────────────
@@ -210,6 +232,19 @@ export interface ActivityRead {
   entity_id: string
   before: Record<string, unknown> | null
   after: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface AuditLogRead {
+  id: string
+  actor_user_id: string | null
+  actor_api_key_id: string | null
+  action: string
+  entity_type: string
+  entity_id: string | null
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  metadata: Record<string, unknown> | null
   created_at: string
 }
 
