@@ -28,12 +28,18 @@ export const useAuthStore = defineStore('auth', {
     },
     async handleCallback(code: string, state: string) {
       const redirectUri = window.location.origin + '/login'
+      const expectedState = localStorage.getItem('auth_state')
+      if (!expectedState || expectedState !== state) {
+        localStorage.removeItem('auth_state')
+        throw new Error('Invalid login state')
+      }
       const response = await api.get<CallbackResponse>('/auth/callback', {
         params: { code, state, redirect_uri: redirectUri },
       })
       const { access_token, user } = response.data
       localStorage.setItem('access_token', access_token)
       localStorage.setItem('user', JSON.stringify(user))
+      localStorage.removeItem('auth_state')
       this.token = access_token
       this.user = user
       return user
@@ -52,6 +58,9 @@ export const useAuthStore = defineStore('auth', {
         if (isAxiosError(error) && error.response?.status === 401) {
           this.token = null
           this.user = null
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('user')
+          localStorage.removeItem('auth_state')
         }
       } finally {
         this.ready = true

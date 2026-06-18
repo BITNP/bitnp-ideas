@@ -20,6 +20,11 @@ class ApiMessage(BaseModel):
     message: str
 
 
+class LoginResponse(BaseModel):
+    authorization_url: str
+    state: str
+
+
 class Page[T](BaseModel):
     data: list[T]
     total: int
@@ -38,6 +43,12 @@ class CurrentUser(BaseModel):
     display_name: str
     global_role: GlobalRole
     is_active: bool = True
+
+
+class CallbackResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: CurrentUser
 
 
 class IdeaTagRead(BaseModel):

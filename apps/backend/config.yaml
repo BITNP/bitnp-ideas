@@ -13,6 +13,8 @@ database:
 
 security:
   session_secret_key: 95fe1bc4c086b3dc578b75005a8d1874834cb82dc6fee56e70bc26c38e510c846855a80cb6093761f2ceabfb5738254817fa9be2836f0db9f90eaab7a83d95a5b1461a3ba36408c97c9c349e6b04568f428b33de8f24b25f732868b16ab176a5686de68bd3e889e5126d1a34154194e9beae686149a4d4368bf20834dfe5bffb
+  session_token_ttl_seconds: 28800
+  oidc_state_ttl_seconds: 600
   oidc:
     enabled: true
     issuer_url: http://localhost:8080/realms/bitnp-ideas

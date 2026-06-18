@@ -285,6 +285,15 @@ class ApiKeyNonce(Base):
     __table_args__ = (UniqueConstraint("key_id", "nonce", name="uq_api_key_nonces_key_nonce"),)
 
 
+class SessionTokenRevocation(Base):
+    __tablename__ = "session_token_revocations"
+
+    jti: Mapped[str] = mapped_column(String(128), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ActivityStream(Base):
     __tablename__ = "activity_stream"
 

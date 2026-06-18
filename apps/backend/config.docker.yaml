@@ -14,6 +14,8 @@ database:
 
 security:
   session_secret_key: bitnp-ideas-docker-session-secret
+  session_token_ttl_seconds: 28800
+  oidc_state_ttl_seconds: 600
   oidc:
     enabled: false
     issuer_url: https://login.bitnp.net/auth/realms/master

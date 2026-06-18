@@ -16,6 +16,26 @@ def component(schema: dict[str, Any], name: str) -> dict[str, Any]:
     return schema["components"]["schemas"][name]
 
 
+def operation_success_schema(schema: dict[str, Any], path: str, method: str, status: str) -> dict:
+    return schema["paths"][path][method]["responses"][status]["content"]["application/json"][
+        "schema"
+    ]
+
+
+def response_ref_name(schema: dict[str, Any], path: str, method: str, status: str) -> str | None:
+    success_schema = operation_success_schema(schema, path, method, status)
+    ref = success_schema.get("$ref")
+    return ref.rsplit("/", 1)[-1] if isinstance(ref, str) else None
+
+
+def resolved_success_schema(schema: dict[str, Any], path: str, method: str, status: str) -> dict:
+    success_schema = operation_success_schema(schema, path, method, status)
+    ref_name = response_ref_name(schema, path, method, status)
+    if ref_name is not None:
+        return component(schema, ref_name)
+    return success_schema
+
+
 def test_frontend_read_models_expose_timestamps() -> None:
     schema = openapi_schema()
 
@@ -51,6 +71,14 @@ def test_gantt_bulk_change_accepts_status() -> None:
     assert expected <= properties.keys()
 
 
+def test_gantt_read_uses_task_read_items() -> None:
+    schema = openapi_schema()
+
+    tasks_schema = component(schema, "GanttRead")["properties"]["tasks"]
+
+    assert tasks_schema["items"]["$ref"].endswith("/TaskRead")
+
+
 def test_link_preview_has_preview_shape() -> None:
     schema = openapi_schema()
 
@@ -67,6 +95,24 @@ def test_audit_logs_route_is_exposed_without_api_version_prefix() -> None:
 
     assert "/audit-logs" in schema["paths"]
     assert "/api/v1/audit-logs" not in schema["paths"]
+
+
+def test_auth_responses_match_frontend_contract() -> None:
+    schema = openapi_schema()
+
+    login_response = schema["paths"]["/auth/login"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    login_schema = component(schema, login_response["$ref"].rsplit("/", 1)[-1])
+    assert {"authorization_url", "state"} <= set(login_schema["required"])
+
+    callback_response = schema["paths"]["/auth/callback"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    callback_schema = component(schema, callback_response["$ref"].rsplit("/", 1)[-1])
+    assert {"access_token", "token_type", "user"} <= set(callback_schema["required"])
+    user_schema = callback_schema["properties"]["user"]
+    assert user_schema["$ref"].endswith("/CurrentUser")
 
 
 def test_paginated_get_routes_expose_offset_limit_and_page_shape() -> None:
@@ -114,3 +160,94 @@ def test_paginated_get_routes_expose_offset_limit_and_page_shape() -> None:
 
     assert paginated_routes == expected_paths
     assert invalid_page_routes == []
+
+
+def test_frontend_api_module_routes_exist_in_openapi() -> None:
+    schema = openapi_schema()
+
+    expected_routes = [
+        ("get", "/auth/login", "200", "LoginResponse"),
+        ("get", "/auth/callback", "200", "CallbackResponse"),
+        ("get", "/auth/me", "200", "CurrentUser"),
+        ("post", "/auth/logout", "200", "ApiMessage"),
+        ("get", "/users", "200", None),
+        ("get", "/users/{user_id}", "200", "CurrentUser"),
+        ("patch", "/users/{user_id}/role", "200", "ApiMessage"),
+        ("patch", "/users/{user_id}/active", "200", "ApiMessage"),
+        ("get", "/idea-tags", "200", None),
+        ("post", "/idea-tags", "201", "IdeaTagRead"),
+        ("get", "/idea-tags/{tag_id}", "200", "IdeaTagRead"),
+        ("patch", "/idea-tags/{tag_id}", "200", "IdeaTagRead"),
+        ("delete", "/idea-tags/{tag_id}", "200", "ApiMessage"),
+        ("get", "/ideas", "200", None),
+        ("post", "/ideas", "201", "IdeaRead"),
+        ("get", "/ideas/{idea_id}", "200", "IdeaRead"),
+        ("patch", "/ideas/{idea_id}", "200", "IdeaRead"),
+        ("delete", "/ideas/{idea_id}", "200", "ApiMessage"),
+        ("post", "/ideas/{idea_id}/status", "200", "ApiMessage"),
+        ("get", "/ideas/{idea_id}/history", "200", None),
+        ("post", "/ideas/{idea_id}/tags", "200", "ApiMessage"),
+        ("delete", "/ideas/{idea_id}/tags/{tag_id}", "200", "ApiMessage"),
+        ("get", "/projects", "200", None),
+        ("post", "/projects", "201", "ProjectRead"),
+        ("get", "/projects/{project_id}", "200", "ProjectRead"),
+        ("patch", "/projects/{project_id}", "200", "ProjectRead"),
+        ("delete", "/projects/{project_id}", "200", "ApiMessage"),
+        ("post", "/projects/{project_id}/members", "200", "ApiMessage"),
+        ("delete", "/projects/{project_id}/members/{user_id}", "200", "ApiMessage"),
+        ("get", "/projects/{project_id}/ideas", "200", None),
+        ("post", "/projects/{project_id}/ideas", "200", "ApiMessage"),
+        ("delete", "/projects/{project_id}/ideas/{idea_id}", "200", "ApiMessage"),
+        ("get", "/projects/{project_id}/tasks", "200", None),
+        ("post", "/projects/{project_id}/tasks", "201", "TaskRead"),
+        ("get", "/tasks/{task_id}", "200", "TaskRead"),
+        ("patch", "/tasks/{task_id}", "200", "TaskRead"),
+        ("delete", "/tasks/{task_id}", "200", "ApiMessage"),
+        ("get", "/projects/{project_id}/gantt", "200", "GanttRead"),
+        ("patch", "/projects/{project_id}/gantt/bulk", "200", "ApiMessage"),
+        ("post", "/projects/{project_id}/task-dependencies", "200", "ApiMessage"),
+        (
+            "delete",
+            "/projects/{project_id}/task-dependencies/{dependency_id}",
+            "200",
+            "ApiMessage",
+        ),
+        ("get", "/projects/{project_id}/activity", "200", None),
+        ("get", "/api-keys", "200", None),
+        ("post", "/api-keys", "201", "ApiKeyCreateResponse"),
+        ("patch", "/api-keys/{api_key_id}", "200", "ApiMessage"),
+        ("delete", "/api-keys/{api_key_id}", "200", "ApiMessage"),
+        ("post", "/api-keys/{api_key_id}/rotate", "200", "ApiKeyCreateResponse"),
+        ("get", "/audit-logs", "200", None),
+        ("get", "/{entity_type}/{entity_id}/links", "200", None),
+        ("post", "/{entity_type}/{entity_id}/links", "201", "ExternalLinkRead"),
+        ("delete", "/links/{link_id}", "200", "ApiMessage"),
+        ("post", "/links/preview", "200", "LinkPreview"),
+    ]
+
+    missing: list[str] = []
+    schema_mismatches: list[str] = []
+
+    for method, path, status_code, expected_ref in expected_routes:
+        operation = schema["paths"].get(path, {}).get(method)
+        if operation is None:
+            missing.append(f"{method.upper()} {path}")
+            continue
+        if status_code not in operation.get("responses", {}):
+            missing.append(f"{method.upper()} {path} response {status_code}")
+            continue
+        if expected_ref is not None:
+            actual_ref = response_ref_name(schema, path, method, status_code)
+            if actual_ref != expected_ref:
+                schema_mismatches.append(
+                    f"{method.upper()} {path}: expected {expected_ref}, got {actual_ref}"
+                )
+        else:
+            properties = resolved_success_schema(schema, path, method, status_code).get(
+                "properties", {}
+            )
+            if not {"data", "total"} <= set(properties):
+                schema_mismatches.append(f"{method.upper()} {path}: expected Page response")
+
+    assert missing == []
+    assert schema_mismatches == []

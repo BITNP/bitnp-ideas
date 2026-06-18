@@ -1,6 +1,7 @@
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,9 +41,17 @@ async def list_audit_logs(
     action: str | None = None,
     entity_type: str | None = None,
     entity_id: str | None = None,
+    created_from: date | None = None,
+    created_to: date | None = None,
     offset: int = 0,
     limit: int = 50,
 ) -> Page[AuditLogRead]:
+    if created_from and created_to and created_from > created_to:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="created_from must be before or equal to created_to.",
+        )
+
     statement = select(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
     if actor_user_id:
         statement = statement.where(AuditLog.actor_user_id == actor_user_id)
@@ -54,6 +63,13 @@ async def list_audit_logs(
         statement = statement.where(AuditLog.entity_type == entity_type)
     if entity_id:
         statement = statement.where(AuditLog.entity_id == entity_id)
+    if created_from:
+        statement = statement.where(
+            AuditLog.created_at >= datetime.combine(created_from, time.min, tzinfo=UTC)
+        )
+    if created_to:
+        to_exclusive = datetime.combine(created_to + timedelta(days=1), time.min, tzinfo=UTC)
+        statement = statement.where(AuditLog.created_at < to_exclusive)
     total = await total_for_statement(session, statement)
     result = await session.scalars(
         statement.offset(normalized_offset(offset)).limit(normalized_limit(limit))

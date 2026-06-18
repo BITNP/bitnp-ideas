@@ -7,6 +7,8 @@ export interface AuditLogFilters extends PaginationParams {
   action?: string
   entity_type?: string
   entity_id?: string
+  created_from?: string
+  created_to?: string
 }
 
 export const auditApi = {

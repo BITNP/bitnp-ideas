@@ -52,22 +52,22 @@ export interface TagRead {
 
 export interface TagCreate {
   name: string
-  color?: string
-  description?: string
+  color?: string | null
+  description?: string | null
 }
 
 export interface TagUpdate {
-  name?: string
-  color?: string
-  description?: string
-  is_active?: boolean
+  name?: string | null
+  color?: string | null
+  description?: string | null
+  is_active?: boolean | null
 }
 
 // ── Ideas ───────────────────────────────────────────────
 export interface IdeaRead {
   id: string
   title: string
-  description: string
+  description: string | null
   status: string
   priority: string | null
   tags: TagRead[]
@@ -80,22 +80,24 @@ export interface IdeaRead {
 
 export interface IdeaCreate {
   title: string
-  description?: string
-  priority?: string
+  description?: string | null
+  priority?: string | null
   tag_names?: string[]
 }
 
 export interface IdeaUpdate {
-  title?: string
-  description?: string
-  priority?: string
+  title?: string | null
+  description?: string | null
+  priority?: string | null
+  linked_project_id?: string | null
+  linked_project_url?: string | null
 }
 
 export interface IdeaStatusUpdate {
   status: string
-  note?: string
-  linked_project_id?: string
-  linked_project_url?: string
+  note?: string | null
+  linked_project_id?: string | null
+  linked_project_url?: string | null
 }
 
 export interface IdeaStatusHistoryRead {
@@ -129,18 +131,18 @@ export interface ProjectRead {
 export interface ProjectCreate {
   key: string
   name: string
-  description?: string
-  owner_id?: string
+  description?: string | null
+  owner_id?: string | null
 }
 
 export interface ProjectUpdate {
-  key?: string
-  name?: string
-  description?: string
-  status?: string
+  key?: string | null
+  name?: string | null
+  description?: string | null
+  status?: string | null
   owner_id?: string | null
-  start_date?: string
-  target_end_date?: string
+  start_date?: string | null
+  target_end_date?: string | null
 }
 
 // ── Tasks ───────────────────────────────────────────────
@@ -161,36 +163,25 @@ export interface TaskRead {
 
 export interface TaskCreate {
   title: string
-  description?: string
-  assignee_id?: string
-  start_date?: string
-  end_date?: string
-}
-
-export interface TaskUpdate {
-  title?: string
-  description?: string
-  status?: string
+  description?: string | null
   assignee_id?: string | null
   start_date?: string | null
   end_date?: string | null
-  progress?: number
+}
+
+export interface TaskUpdate {
+  title?: string | null
+  description?: string | null
+  status?: string | null
+  assignee_id?: string | null
+  start_date?: string | null
+  end_date?: string | null
+  progress?: number | null
   parent_task_id?: string | null
-  version?: number
+  version?: number | null
 }
 
 // ── Gantt ───────────────────────────────────────────────
-export interface GanttTask {
-  id: string
-  title: string
-  status: string
-  assignee: EntityRef | null
-  start_date: string | null
-  end_date: string | null
-  progress: number
-  version: number
-}
-
 export interface GanttDependency {
   id: string
   predecessor_task_id: string
@@ -200,20 +191,22 @@ export interface GanttDependency {
 
 export interface GanttRead {
   project: ProjectRead
-  tasks: GanttTask[]
+  tasks: TaskRead[]
   dependencies: GanttDependency[]
 }
 
+export interface GanttBulkChange {
+  task_id: string
+  version: number
+  start_date?: string | null
+  end_date?: string | null
+  assignee_id?: string | null
+  progress?: number | null
+  status?: string | null
+}
+
 export interface GanttBulkUpdate {
-  changes: Array<{
-    task_id: string
-    version: number
-    start_date?: string | null
-    end_date?: string | null
-    assignee_id?: string | null
-    progress?: number
-    status?: string
-  }>
+  changes: GanttBulkChange[]
 }
 
 export interface TaskDependencyCreate {
@@ -267,9 +260,9 @@ export interface ApiKeyCreate {
 }
 
 export interface ApiKeyUpdate {
-  name?: string
-  is_active?: boolean
-  scopes?: string[]
+  name?: string | null
+  is_active?: boolean | null
+  scopes?: string[] | null
 }
 
 export interface ApiKeyCreateResponse {
@@ -291,11 +284,13 @@ export interface ExternalLinkRead {
   created_at: string
 }
 
+export type ExternalLinkEntityType = 'idea' | 'project' | 'task'
+
 export interface ExternalLinkCreate {
   url: string
-  title?: string
-  description?: string
-  link_type?: string
+  title?: string | null
+  description?: string | null
+  link_type?: string | null
 }
 
 export interface LinkPreview {

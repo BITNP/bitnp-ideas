@@ -87,6 +87,8 @@ class SecuritySettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session_secret_key: str = Field(min_length=16)
+    session_token_ttl_seconds: int = Field(default=60 * 60 * 8, gt=0, le=60 * 60 * 24 * 30)
+    oidc_state_ttl_seconds: int = Field(default=60 * 10, gt=0, le=60 * 60)
     oidc: OidcSettings
 
 

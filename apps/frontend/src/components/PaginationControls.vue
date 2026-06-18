@@ -15,7 +15,10 @@ const emit = defineEmits<{
 }>()
 
 const limitOptions = [10, 25, 50, 100]
-const currentPage = computed(() => Math.floor(props.offset / props.limit) + 1)
+const currentPage = computed({
+  get: () => Math.floor(props.offset / props.limit) + 1,
+  set: (page: number) => changePage(page),
+})
 const pageCount = computed(() => Math.max(Math.ceil(props.total / props.limit), 1))
 const startRow = computed(() => props.total === 0 ? 0 : props.offset + 1)
 const endRow = computed(() => Math.min(props.offset + props.limit, props.total))
@@ -38,19 +41,16 @@ function changePage(page: number) {
         label="Rows"
         hide-details
         density="compact"
-        variant="outlined"
+        variant="underlined"
         max-width="120"
         @update:model-value="changeLimit"
       />
       <v-pagination
-        :model-value="currentPage"
+        v-model="currentPage"
         :length="pageCount"
         :disabled="loading"
         density="comfortable"
-        rounded="0"
-        variant="outlined"
-        total-visible="5"
-        @update:model-value="changePage"
+        total-visible="6"
       />
     </div>
     <div class="text-caption text-medium-emphasis">
@@ -58,3 +58,4 @@ function changePage(page: number) {
     </div>
   </div>
 </template>
+

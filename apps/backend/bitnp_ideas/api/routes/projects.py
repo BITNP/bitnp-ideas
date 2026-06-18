@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bitnp_ideas.db.session import get_db_session
-from bitnp_ideas.models.entities import Idea, Project, ProjectIdea, ProjectMember
+from bitnp_ideas.models.entities import Idea, Project, ProjectIdea, ProjectMember, User
 from bitnp_ideas.models.enums import GlobalRole
 from bitnp_ideas.schemas.common import (
     ApiMessage,
@@ -61,6 +61,8 @@ async def create_project(
     actor: ProjectAdminDep,
     session: DbSessionDep,
 ) -> ProjectRead:
+    if payload.owner_id and await session.get(User, payload.owner_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Owner not found.")
     project = Project(
         key=payload.key.upper(),
         name=payload.name,
@@ -173,6 +175,8 @@ async def add_project_member(
 ) -> ApiMessage:
     if await session.get(Project, project_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
+    if await session.get(User, payload.user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
     exists = await session.scalar(
         select(ProjectMember).where(
             ProjectMember.project_id == project_id,

@@ -43,6 +43,29 @@ The API runs on `http://localhost:8000`, and the frontend runs on `http://localh
 
 Docker uses [apps/backend/config.docker.yaml](apps/backend/config.docker.yaml), selected with `BITNP_IDEAS_CONFIG`, so the backend container connects to the Compose `postgres` service while the normal local config remains pointed at `127.0.0.1`.
 
+If you change `POSTGRES_DB`, `POSTGRES_USER`, or `POSTGRES_PASSWORD` in `.env`,
+update `apps/backend/config.docker.yaml` to the same database URL. The backend
+does not interpolate Compose database variables into YAML.
+
+Initialize or migrate the Docker database after the services are healthy:
+
+```bash
+docker compose exec backend uv run alembic upgrade head
+```
+
+If your checkout does not include a coordinated Alembic revision chain, generate
+and inspect a local migration first:
+
+```bash
+docker compose exec backend uv run alembic revision --autogenerate -m "local schema"
+docker compose exec backend uv run alembic upgrade head
+```
+
+## Non-Docker Deployment
+
+See [docs/deployment.md](docs/deployment.md) for the systemd, nginx,
+PostgreSQL, migration, and release-check workflow.
+
 ## Database Migrations
 
 Alembic migration files under `apps/backend/alembic/versions/*.py` are ignored by default.

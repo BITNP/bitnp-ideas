@@ -31,8 +31,6 @@ services:
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
-    environment:
-      VITE_API_BASE_URL: /api/v1
     ports:
       - "8080:80"
     depends_on:

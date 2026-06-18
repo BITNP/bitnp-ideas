@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { VDateInput } from 'vuetify/components/VDateInput'
 
-import GanttBoard from '@/components/GanttBoard.vue'
 import MetricTile from '@/components/MetricTile.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 import { projectsApi, tasksApi, ganttApi, activityApi, linksApi, usersApi, ideasApi } from '@/api/modules'
+import { useAuthStore } from '@/stores/auth'
 import type {
   ProjectRead,
   TaskRead,
@@ -18,7 +18,9 @@ import type {
 } from '@/types/api'
 
 const route = useRoute()
+const auth = useAuthStore()
 const projectId = route.params.id as string
+const GanttBoard = defineAsyncComponent(() => import('@/components/GanttBoard.vue'))
 
 const tab = ref(route.name === 'project-gantt' ? 'gantt' : route.name === 'project-activity' ? 'activity' : 'overview')
 
@@ -35,6 +37,7 @@ const error = ref<string | null>(null)
 const taskOffset = ref(0)
 const taskLimit = ref(25)
 const taskTotal = ref(0)
+const openTaskTotal = ref(0)
 const ideaOffset = ref(0)
 const ideaLimit = ref(25)
 const ideaTotal = ref(0)
@@ -45,11 +48,16 @@ const activityOffset = ref(0)
 const activityLimit = ref(25)
 const activityTotal = ref(0)
 
-const openTaskCount = computed(() => tasks.value.filter((t) => t.status !== 'done').length)
+const openTaskCount = computed(() => openTaskTotal.value)
 const memberIds = computed(() => new Set(project.value?.members.map((member) => member.id) ?? []))
 const availableUsers = computed(() => users.value.filter((user) => !memberIds.value.has(user.id)))
 const linkedIdeaIds = computed(() => new Set(projectIdeas.value.map((idea) => idea.id)))
 const availableIdeas = computed(() => ideaOptions.value.filter((idea) => !linkedIdeaIds.value.has(idea.id)))
+const canManageProject = computed(() => auth.isAdmin)
+const canEditProjectWork = computed(() => {
+  if (!auth.user) return false
+  return canManageProject.value || memberIds.value.has(auth.user.id)
+})
 
 const addTaskDialog = ref(false)
 const newTaskTitle = ref('')
@@ -93,7 +101,29 @@ function dateFromString(value: string | null) {
 }
 
 function dateToString(value: Date | null) {
-  return value ? value.toISOString().slice(0, 10) : null
+  if (!value) return null
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function dateRangeToString(value: Date | string | null | undefined) {
+  if (!value) return undefined
+  if (value instanceof Date) return dateToString(value) ?? undefined
+  return value.slice(0, 10)
+}
+
+function requireProjectManagement() {
+  if (canManageProject.value) return true
+  error.value = 'You do not have permission to manage this project.'
+  return false
+}
+
+function requireProjectWorkEdit() {
+  if (canEditProjectWork.value) return true
+  error.value = 'You do not have permission to edit project work.'
+  return false
 }
 
 function applyProject(value: ProjectRead) {
@@ -106,6 +136,10 @@ function applyProject(value: ProjectRead) {
 async function fetchProject() {
   const res = await projectsApi.get(projectId)
   applyProject(res.data)
+}
+
+function countOpenTasks(values: TaskRead[]) {
+  return values.filter((task) => task.status !== 'done').length
 }
 
 async function fetchReferenceData() {
@@ -132,9 +166,12 @@ onMounted(async () => {
     const res = await tasksApi.list(projectId, { offset: taskOffset.value, limit: taskLimit.value })
     tasks.value = res.data.data
     taskTotal.value = res.data.total
+    await refreshOpenTaskTotal(res.data.data, res.data.total, taskLimit.value)
   } catch {
     // tasks are optional for overview display
   }
+
+  await fetchIdeas(0, ideaLimit.value)
 
   loading.value = false
 
@@ -170,7 +207,23 @@ async function fetchTasks(offset = taskOffset.value, limit = taskLimit.value) {
     taskTotal.value = res.data.total
     taskOffset.value = offset
     taskLimit.value = limit
+    if (offset === 0) {
+      await refreshOpenTaskTotal(res.data.data, res.data.total, limit)
+    }
   } catch { /* empty */ }
+}
+
+async function refreshOpenTaskTotal(firstPage: TaskRead[], total: number, firstPageLimit: number) {
+  let offset = firstPageLimit
+  let openCount = countOpenTasks(firstPage)
+
+  while (offset < total) {
+    const res = await tasksApi.list(projectId, { offset, limit: 100 })
+    openCount += countOpenTasks(res.data.data)
+    offset += 100
+  }
+
+  openTaskTotal.value = openCount
 }
 
 async function fetchActivities(offset = activityOffset.value, limit = activityLimit.value) {
@@ -225,14 +278,15 @@ function openTask(task: TaskRead) {
 }
 
 async function handleAddTask() {
+  if (!requireProjectWorkEdit()) return
   if (!newTaskTitle.value) return
   try {
     const res = await tasksApi.create(projectId, {
       title: newTaskTitle.value,
       description: newTaskDescription.value || undefined,
       assignee_id: newTaskAssignee.value || undefined,
-      start_date: taskDateRange.value[0]?.toISOString().slice(0, 10) || undefined,
-      end_date: taskDateRange.value[1]?.toISOString().slice(0, 10) || undefined,
+      start_date: dateRangeToString(taskDateRange.value[0]) || undefined,
+      end_date: dateRangeToString(taskDateRange.value[1]) || undefined,
     })
     tasks.value.push(res.data)
     addTaskDialog.value = false
@@ -250,6 +304,7 @@ async function handleAddTask() {
 }
 
 async function handleSaveTask() {
+  if (!requireProjectWorkEdit()) return
   if (!selectedTask.value || !taskTitle.value) return
   try {
     const res = await tasksApi.update(selectedTask.value.id, {
@@ -274,6 +329,7 @@ async function handleSaveTask() {
 }
 
 async function handleArchiveTask() {
+  if (!requireProjectWorkEdit()) return
   if (!selectedTask.value) return
   try {
     await tasksApi.delete(selectedTask.value.id)
@@ -288,6 +344,7 @@ async function handleArchiveTask() {
 }
 
 async function handleAddMember() {
+  if (!requireProjectManagement()) return
   if (!selectedMemberId.value) return
   try {
     await projectsApi.addMember(projectId, selectedMemberId.value)
@@ -301,6 +358,7 @@ async function handleAddMember() {
 }
 
 async function handleRemoveMember(userId: string) {
+  if (!requireProjectManagement()) return
   try {
     await projectsApi.removeMember(projectId, userId)
     await fetchProject()
@@ -311,6 +369,7 @@ async function handleRemoveMember(userId: string) {
 }
 
 async function handleLinkIdea() {
+  if (!requireProjectManagement()) return
   if (!selectedIdeaId.value) return
   try {
     await projectsApi.addIdea(projectId, selectedIdeaId.value, selectedIdeaRelation.value)
@@ -325,6 +384,7 @@ async function handleLinkIdea() {
 }
 
 async function handleUnlinkIdea(ideaId: string) {
+  if (!requireProjectManagement()) return
   try {
     await projectsApi.removeIdea(projectId, ideaId)
     await fetchIdeas(ideaOffset.value, ideaLimit.value)
@@ -335,6 +395,7 @@ async function handleUnlinkIdea(ideaId: string) {
 }
 
 async function handleCreateLink() {
+  if (!requireProjectWorkEdit()) return
   if (!linkUrl.value) return
   try {
     await linksApi.create('project', projectId, {
@@ -355,6 +416,7 @@ async function handleCreateLink() {
 }
 
 async function handleDeleteLink(linkId: string) {
+  if (!requireProjectWorkEdit()) return
   try {
     await linksApi.delete(linkId)
     await fetchLinks(linkOffset.value, linkLimit.value)
@@ -364,6 +426,7 @@ async function handleDeleteLink(linkId: string) {
 }
 
 async function handleSaveSettings() {
+  if (!requireProjectManagement()) return
   if (!project.value) return
   try {
     const res = await projectsApi.update(projectId, {
@@ -396,8 +459,22 @@ function handleGanttError(message: string) {
           <h1 class="text-h5 mb-1">{{ project.name }}</h1>
         </div>
         <div class="d-flex flex-wrap ga-2 justify-end">
-          <v-btn color="primary" prepend-icon="$plus" @click="addTaskDialog = true">Add task</v-btn>
-          <v-btn variant="tonal" prepend-icon="$users" @click="memberDialog = true">Add member</v-btn>
+          <v-btn
+            v-if="canEditProjectWork"
+            color="primary"
+            prepend-icon="$plus"
+            @click="addTaskDialog = true"
+          >
+            Add task
+          </v-btn>
+          <v-btn
+            v-if="canManageProject"
+            variant="tonal"
+            prepend-icon="$users"
+            @click="memberDialog = true"
+          >
+            Add member
+          </v-btn>
         </div>
       </div>
 
@@ -408,7 +485,7 @@ function handleGanttError(message: string) {
         <v-tab value="ideas">Ideas</v-tab>
         <v-tab value="links">Links</v-tab>
         <v-tab value="activity">Activity</v-tab>
-        <v-tab value="settings">Settings</v-tab>
+        <v-tab v-if="canManageProject" value="settings">Settings</v-tab>
       </v-tabs>
 
       <v-window v-model="tab">
@@ -417,7 +494,7 @@ function handleGanttError(message: string) {
             <MetricTile label="Progress" :value="`${project.progress}%`" icon="$check" tone="success" />
             <MetricTile label="Members" :value="project.members.length" icon="$users" tone="secondary" />
             <MetricTile label="Open tasks" :value="openTaskCount" icon="$calendar" tone="primary" />
-            <MetricTile label="Linked ideas" :value="projectIdeas.length" icon="$idea" tone="accent" />
+            <MetricTile label="Linked ideas" :value="ideaTotal" icon="$idea" tone="accent" />
           </div>
           <div class="content-grid">
             <v-card border flat>
@@ -438,7 +515,13 @@ function handleGanttError(message: string) {
               <v-card-title class="d-flex align-center">
                 <span>Members</span>
                 <v-spacer />
-                <v-btn icon="$plus" variant="text" size="small" @click="memberDialog = true" />
+                <v-btn
+                  v-if="canManageProject"
+                  icon="$plus"
+                  variant="text"
+                  size="small"
+                  @click="memberDialog = true"
+                />
               </v-card-title>
               <v-list v-if="project.members.length">
                 <v-list-item
@@ -447,7 +530,7 @@ function handleGanttError(message: string) {
                   :title="member.name"
                   prepend-icon="$account"
                 >
-                  <template #append>
+                  <template v-if="canManageProject" #append>
                     <v-btn
                       icon="$delete"
                       variant="text"
@@ -500,6 +583,7 @@ function handleGanttError(message: string) {
             :tasks="ganttData.tasks ?? []"
             :dependencies="ganttData.dependencies ?? []"
             :project-id="projectId"
+            :readonly="!canEditProjectWork"
             @refresh="fetchGantt"
             @error="handleGanttError"
           />
@@ -509,7 +593,7 @@ function handleGanttError(message: string) {
         </v-window-item>
 
         <v-window-item value="ideas">
-          <div class="d-flex justify-end mb-3">
+          <div v-if="canManageProject" class="d-flex justify-end mb-3">
             <v-btn color="primary" variant="tonal" prepend-icon="$plus" @click="ideaDialog = true">Link idea</v-btn>
           </div>
           <v-card v-if="projectIdeas.length" border flat>
@@ -521,7 +605,7 @@ function handleGanttError(message: string) {
                 :subtitle="idea.status"
                 prepend-icon="$idea"
               >
-                <template #append>
+                <template v-if="canManageProject" #append>
                   <v-btn
                     icon="$delete"
                     variant="text"
@@ -544,7 +628,7 @@ function handleGanttError(message: string) {
         </v-window-item>
 
         <v-window-item value="links">
-          <div class="d-flex justify-end mb-3">
+          <div v-if="canEditProjectWork" class="d-flex justify-end mb-3">
             <v-btn color="primary" variant="tonal" prepend-icon="$plus" @click="linkDialog = true">Add link</v-btn>
           </div>
           <v-card v-if="links.length" border flat>
@@ -558,7 +642,7 @@ function handleGanttError(message: string) {
                 :href="link.url"
                 target="_blank"
               >
-                <template #append>
+                <template v-if="canEditProjectWork" #append>
                   <v-btn
                     icon="$delete"
                     variant="text"
@@ -607,7 +691,7 @@ function handleGanttError(message: string) {
           />
         </v-window-item>
 
-        <v-window-item value="settings">
+        <v-window-item v-if="canManageProject" value="settings">
           <v-card border flat>
             <v-card-title>Project settings</v-card-title>
             <v-card-text>
@@ -629,14 +713,14 @@ function handleGanttError(message: string) {
       <p class="text-body-1 text-medium-emphasis">Project not found.</p>
     </div>
 
-    <v-dialog v-model="addTaskDialog" max-width="520">
+    <v-dialog v-if="canEditProjectWork" v-model="addTaskDialog" max-width="520">
       <v-card title="Add Task">
         <v-card-text>
           <v-text-field v-model="newTaskTitle" label="Title" />
           <v-textarea v-model="newTaskDescription" label="Description" rows="3" />
           <v-autocomplete
             v-model="newTaskAssignee"
-            :items="project.members"
+            :items="project?.members ?? []"
             item-title="name"
             item-value="id"
             label="Assignee"
@@ -652,7 +736,7 @@ function handleGanttError(message: string) {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="memberDialog" max-width="480">
+    <v-dialog v-if="canManageProject" v-model="memberDialog" max-width="480">
       <v-card title="Add Member">
         <v-card-text>
           <v-autocomplete
@@ -672,7 +756,7 @@ function handleGanttError(message: string) {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="ideaDialog" max-width="520">
+    <v-dialog v-if="canManageProject" v-model="ideaDialog" max-width="520">
       <v-card title="Link Idea">
         <v-card-text>
           <v-autocomplete
@@ -693,7 +777,7 @@ function handleGanttError(message: string) {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="linkDialog" max-width="560">
+    <v-dialog v-if="canEditProjectWork" v-model="linkDialog" max-width="560">
       <v-card title="Add Link">
         <v-card-text>
           <v-text-field v-model="linkUrl" label="URL" prepend-inner-icon="$link" />
@@ -713,13 +797,13 @@ function handleGanttError(message: string) {
       <template v-if="selectedTask">
         <v-toolbar flat>
           <v-toolbar-title>Task detail</v-toolbar-title>
-          <v-btn icon="$delete" variant="text" @click="handleArchiveTask" />
+          <v-btn v-if="canEditProjectWork" icon="$delete" variant="text" @click="handleArchiveTask" />
           <v-btn icon="$close" variant="text" @click="taskDrawer = false" />
         </v-toolbar>
         <div class="pa-4">
-          <v-text-field v-model="taskTitle" label="Title" />
-          <v-textarea v-model="taskDescription" label="Description" rows="3" />
-          <v-select v-model="taskStatus" :items="taskStatuses" label="Status" />
+          <v-text-field v-model="taskTitle" label="Title" :readonly="!canEditProjectWork" />
+          <v-textarea v-model="taskDescription" label="Description" rows="3" :readonly="!canEditProjectWork" />
+          <v-select v-model="taskStatus" :items="taskStatuses" label="Status" :readonly="!canEditProjectWork" />
           <v-autocomplete
             v-model="taskAssigneeId"
             :items="project?.members ?? []"
@@ -727,10 +811,11 @@ function handleGanttError(message: string) {
             item-value="id"
             label="Assignee"
             clearable
+            :readonly="!canEditProjectWork"
           />
           <div class="d-flex ga-3">
-            <v-date-input v-model="taskStartDate" label="Start" clearable />
-            <v-date-input v-model="taskEndDate" label="End" clearable />
+            <v-date-input v-model="taskStartDate" label="Start" clearable :readonly="!canEditProjectWork" />
+            <v-date-input v-model="taskEndDate" label="End" clearable :readonly="!canEditProjectWork" />
           </div>
           <v-slider
             v-model="taskProgress"
@@ -739,8 +824,10 @@ function handleGanttError(message: string) {
             max="100"
             step="5"
             thumb-label
+            :readonly="!canEditProjectWork"
           />
           <v-btn
+            v-if="canEditProjectWork"
             block
             color="primary"
             variant="tonal"
@@ -754,3 +841,9 @@ function handleGanttError(message: string) {
     </v-navigation-drawer>
   </div>
 </template>
+
+<style scoped>
+.table-row-action {
+  cursor: pointer;
+}
+</style>

@@ -8,6 +8,7 @@
     "build": "pnpm --filter @bitnp-ideas/frontend build",
     "lint": "pnpm --filter @bitnp-ideas/frontend lint",
     "typecheck": "pnpm --filter @bitnp-ideas/frontend typecheck",
+    "test:frontend": "pnpm --filter @bitnp-ideas/frontend test",
     "commitlint": "commitlint --edit"
   },
   "devDependencies": {
@@ -16,4 +17,3 @@
     "prettier": "^3.7.4"
   }
 }
-

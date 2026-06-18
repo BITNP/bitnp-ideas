@@ -3,8 +3,25 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vuetify from 'vite-plugin-vuetify'
 
+function normalizeGanttCssGlobalSelectors() {
+  return {
+    name: 'normalize-gantt-css-global-selectors',
+    enforce: 'pre' as const,
+    transform(code: string, id: string) {
+      if (!id.includes('jordium-gantt-vue3') || !code.includes(':global(')) {
+        return null
+      }
+
+      return {
+        code: code.replace(/:global\(([^)]+)\)/g, '$1'),
+        map: null,
+      }
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [vue(), vuetify({ autoImport: true })],
+  plugins: [normalizeGanttCssGlobalSelectors(), vue(), vuetify({ autoImport: true })],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -19,5 +36,8 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api\/v1/, ''),
       },
     },
+  },
+  build: {
+    chunkSizeWarningLimit: 1200,
   },
 })

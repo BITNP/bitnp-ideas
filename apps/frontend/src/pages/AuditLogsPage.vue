@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { VDateInput } from 'vuetify/components/VDateInput'
 
 import { auditApi } from '@/api/modules'
 import PaginationControls from '@/components/PaginationControls.vue'
@@ -10,12 +11,27 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const actionFilter = ref('')
 const entityTypeFilter = ref<string | null>(null)
+const entityIdFilter = ref('')
+const actorUserFilter = ref('')
+const actorApiKeyFilter = ref('')
+const createdFromFilter = ref<Date | null>(null)
+const createdToFilter = ref<Date | null>(null)
 const selectedLog = ref<AuditLogRead | null>(null)
 const pageOffset = ref(0)
 const pageLimit = ref(25)
 const pageTotal = ref(0)
 
 const entityTypes = ['user', 'idea', 'idea_tag', 'project', 'task', 'task_dependency', 'api_key', 'external_link']
+
+const activeFilterCount = computed(() => [
+  actionFilter.value,
+  entityTypeFilter.value,
+  entityIdFilter.value,
+  actorUserFilter.value,
+  actorApiKeyFilter.value,
+  createdFromFilter.value,
+  createdToFilter.value,
+].filter(Boolean).length)
 
 const selectedPayload = computed(() => {
   if (!selectedLog.value) return ''
@@ -26,6 +42,14 @@ const selectedPayload = computed(() => {
   }, null, 2)
 })
 
+function dateToString(value: Date | null) {
+  if (!value) return undefined
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 async function fetchLogs(offset = pageOffset.value, limit = pageLimit.value) {
   loading.value = true
   error.value = null
@@ -35,6 +59,11 @@ async function fetchLogs(offset = pageOffset.value, limit = pageLimit.value) {
       limit,
       action: actionFilter.value || undefined,
       entity_type: entityTypeFilter.value || undefined,
+      entity_id: entityIdFilter.value || undefined,
+      actor_user_id: actorUserFilter.value || undefined,
+      actor_api_key_id: actorApiKeyFilter.value || undefined,
+      created_from: dateToString(createdFromFilter.value),
+      created_to: dateToString(createdToFilter.value),
     })
     logs.value = res.data.data
     pageTotal.value = res.data.total
@@ -47,9 +76,20 @@ async function fetchLogs(offset = pageOffset.value, limit = pageLimit.value) {
   }
 }
 
-watch([actionFilter, entityTypeFilter], () => {
+function applyFilters() {
   fetchLogs(0, pageLimit.value)
-})
+}
+
+function clearFilters() {
+  actionFilter.value = ''
+  entityTypeFilter.value = null
+  entityIdFilter.value = ''
+  actorUserFilter.value = ''
+  actorApiKeyFilter.value = ''
+  createdFromFilter.value = null
+  createdToFilter.value = null
+  fetchLogs(0, pageLimit.value)
+}
 
 function handlePageChange(page: { offset: number; limit: number }) {
   fetchLogs(page.offset, page.limit)
@@ -87,22 +127,57 @@ onMounted(fetchLogs)
     </div>
 
     <v-card border flat class="mb-4">
-      <v-card-text class="d-flex flex-wrap ga-3">
-        <v-text-field
-          v-model="actionFilter"
-          prepend-inner-icon="$search"
-          label="Action"
-          hide-details
-          max-width="320"
-        />
-        <v-select
-          v-model="entityTypeFilter"
-          :items="entityTypes"
-          clearable
-          label="Entity type"
-          hide-details
-          max-width="260"
-        />
+      <v-card-text>
+        <div class="audit-filter-grid">
+          <v-text-field
+            v-model="actionFilter"
+            prepend-inner-icon="$search"
+            label="Action"
+            hide-details
+          />
+          <v-select
+            v-model="entityTypeFilter"
+            :items="entityTypes"
+            clearable
+            label="Entity type"
+            hide-details
+          />
+          <v-text-field
+            v-model="entityIdFilter"
+            label="Entity ID"
+            hide-details
+          />
+          <v-text-field
+            v-model="actorUserFilter"
+            label="Actor user ID"
+            hide-details
+          />
+          <v-text-field
+            v-model="actorApiKeyFilter"
+            label="Actor API key ID"
+            hide-details
+          />
+          <v-date-input
+            v-model="createdFromFilter"
+            label="Created from"
+            clearable
+            hide-details
+          />
+          <v-date-input
+            v-model="createdToFilter"
+            label="Created to"
+            clearable
+            hide-details
+          />
+          <div class="filter-actions">
+            <v-btn color="primary" prepend-icon="$search" :loading="loading" @click="applyFilters">
+              Apply
+            </v-btn>
+            <v-btn variant="tonal" :disabled="activeFilterCount === 0 || loading" @click="clearFilters">
+              Clear
+            </v-btn>
+          </div>
+        </div>
       </v-card-text>
     </v-card>
 
@@ -180,3 +255,19 @@ onMounted(fetchLogs)
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+.audit-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 40px;
+}
+</style>

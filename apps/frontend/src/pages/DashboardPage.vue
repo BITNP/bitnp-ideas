@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import GanttBoard from '@/components/GanttBoard.vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import MetricTile from '@/components/MetricTile.vue'
 import { activityApi, ideasApi, projectsApi, tasksApi } from '@/api/modules'
 import type { ActivityRead, IdeaRead, ProjectRead, TaskRead } from '@/types/api'
+
+const GanttBoard = defineAsyncComponent(() => import('@/components/GanttBoard.vue'))
 
 interface ActivityDisplayItem {
   title: string
@@ -51,34 +52,52 @@ const activityItems = computed<ActivityDisplayItem[]>(() =>
   }),
 )
 
+async function collectPages<T>(
+  fetchPage: (params: { offset: number, limit: number }) => Promise<{ data: { data: T[], total: number } }>,
+) {
+  const limit = 100
+  const items: T[] = []
+  let offset = 0
+  let total = 0
+
+  do {
+    const response = await fetchPage({ offset, limit })
+    items.push(...response.data.data)
+    total = response.data.total
+    offset += limit
+  } while (offset < total)
+
+  return items
+}
+
 onMounted(async () => {
   loading.value = true
   error.value = null
 
   const [ideasResult, projectsResult] = await Promise.allSettled([
-    ideasApi.list({ offset: 0, limit: 100 }),
-    projectsApi.list({ offset: 0, limit: 100 }),
+    collectPages<IdeaRead>((params) => ideasApi.list(params)),
+    collectPages<ProjectRead>((params) => projectsApi.list(params)),
   ])
 
   if (ideasResult.status === 'fulfilled') {
-    ideas.value = ideasResult.value.data.data
+    ideas.value = ideasResult.value
   }
   if (projectsResult.status === 'fulfilled') {
-    projects.value = projectsResult.value.data.data
+    projects.value = projectsResult.value
   }
 
   if (projects.value.length > 0) {
     const taskResults = await Promise.allSettled(
-      projects.value.map((p) => tasksApi.list(p.id)),
+      projects.value.map((p) => collectPages<TaskRead>((params) => tasksApi.list(p.id, params))),
     )
     const activityResults = await Promise.allSettled(
-      projects.value.map((p) => activityApi.list(p.id)),
+      projects.value.map((p) => collectPages<ActivityRead>((params) => activityApi.list(p.id, params))),
     )
 
     const collectedTasks: TaskRead[] = []
     for (const result of taskResults) {
       if (result.status === 'fulfilled') {
-        collectedTasks.push(...result.value.data.data)
+        collectedTasks.push(...result.value)
       }
     }
     allTasks.value = collectedTasks
@@ -86,7 +105,7 @@ onMounted(async () => {
     const collectedActivities: ActivityRead[] = []
     for (const result of activityResults) {
       if (result.status === 'fulfilled') {
-        collectedActivities.push(...result.value.data.data)
+        collectedActivities.push(...result.value)
       }
     }
     allActivities.value = collectedActivities

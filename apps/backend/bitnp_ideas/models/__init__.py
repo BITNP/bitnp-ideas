@@ -12,6 +12,7 @@ from bitnp_ideas.models.entities import (
     ProjectIdea,
     ProjectMember,
     ProjectTask,
+    SessionTokenRevocation,
     TaskDependency,
     User,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "ProjectIdea",
     "ProjectMember",
     "ProjectTask",
+    "SessionTokenRevocation",
     "TaskDependency",
     "User",
 ]

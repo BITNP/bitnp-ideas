@@ -1530,7 +1530,7 @@ email 不作为唯一身份主键，只作为展示和辅助匹配。
 - 点击 dependency edge 删除依赖
 - 切换 assignee
 - 修改 progress
-- 点击 task 打开 drawer
+- 点击 task 打开 task detail drawer，drawer 内支持 title、description、status、assignee、start_date、end_date、progress 编辑，并带 version 冲突处理。保存后刷新 Tasks、Gantt 和 Activity 相关数据。
 
 ------
 
@@ -1707,6 +1707,16 @@ Activity
 Settings
 ```
 
+Project Detail 第一版必须支持以下可操作 UI：
+
+- Overview：展示项目摘要、成员、任务概览、linked ideas 和 external links。
+- Tasks：创建、查看、编辑、归档 task；打开 task detail drawer；使用 Vuetify 表单组件编辑 assignee、status、日期、progress。
+- Gantt：拖动任务时间、创建/删除依赖，并与任务详情保持同步。
+- Ideas：分页展示 linked ideas，支持关联和解除关联 idea。
+- Links：分页展示 external links，支持创建、删除和打开链接。
+- Activity：分页展示项目活动流。
+- Settings：编辑项目名称、状态、描述等基础设置。
+
 ------
 
 ## 16.5 Project Dashboard
@@ -1723,6 +1733,8 @@ Settings
 
 项目管理者必须能看到 developer 的项目操作记录。
 
+Project Detail 中成员、linked ideas、external links 不只是只读展示；administrator / superuser 需要能在详情页完成增删关联，项目成员需要能完成任务创建、编辑和归档。
+
 ------
 
 ## 16.6 Gantt UI
@@ -1735,6 +1747,8 @@ Settings
 4. 修改进度
 5. 打开任务详情
 6. 查看 activity
+
+Gantt 视图必须支持 day / week / month 三档切换，并使用 Vuetify 分段控件承载视图模式。
 
 ------
 
@@ -2162,6 +2176,9 @@ Cross-project dependencies
 - 后端禁止跨 project dependency。
 - 后端禁止 dependency cycle。
 - developer 的任务操作写入 activity stream 和 audit log。
+- Project Detail 的 Tasks tab 可以完成 task 创建、详情查看、编辑和归档。
+- task detail drawer 的保存必须走 `PATCH /tasks/{task_id}`，并处理 version conflict。
+- 任务变更后 Tasks、Gantt、Activity 的展示状态保持一致。
 
 ------
 
@@ -2175,6 +2192,9 @@ Cross-project dependencies
 - nonce 不可重复使用。
 - API Key secret 只展示一次。
 - API Key secret 不以明文存储。
+- OIDC callback 必须校验签名且带过期时间的 state；前端 callback 也必须先比对本地保存的 state。
+- session JWT 必须包含 `exp`，过期 token 不得继续访问受保护接口。
+- session JWT 必须包含 `jti`，logout 后当前 token 的 `jti` 必须进入服务端 revocation list，后续请求不得继续使用该 token。
 
 ------
 
@@ -2190,10 +2210,14 @@ Cross-project dependencies
 - 后端路由本身不带 `/api/v1` 前缀，前端通过 Vite proxy 和 nginx 将 `/api/v1/*` 剥离后转发到后端裸路径。
 - 数据模型已覆盖用户、idea、tag、项目、成员、项目-idea 关联、任务、依赖、API Key、nonce、activity、audit、external link。
 - 前端已具备登录、dashboard、ideas、projects、project detail、gantt、api keys、users 页面。
-- 甘特图已接入前后端批量更新、任务依赖创建和删除。
+- Project Detail 已支持 Overview / Tasks / Gantt / Ideas / Links / Activity / Settings，并已落地成员管理、linked ideas 管理、external links 创建/删除、task detail drawer、权限态 UI 和分页列表对接。
+- 甘特图已接入前后端批量更新、任务依赖创建和删除，并支持 day / week / month 三档视图切换。
 - Activity Stream 和 Audit Log 写入 helper 已在任务、项目成员、依赖、idea、API Key 等关键动作中使用。
+- Audit Log 查询已支持 action、entity type/id、actor user/API key、created date range 与 offset/limit 分页；前端审计页提供 Vuetify 筛选面板、详情弹窗和统一分页控件。
 - 后端配置统一来自 YAML，开发默认配置为 `apps/backend/config.yaml`。
 - API Key signing secret 只在创建/轮换响应中展示一次，数据库中保存 `fernet:v1:` 受保护密文，不保存明文 secret。
+- OIDC state 已改为签名且带过期时间的令牌，session JWT 已包含 `iat/exp`，前端 callback 会先校验本地 state 再换取 token。
+- Logout 已具备服务端 session revocation 语义：`POST /auth/logout` 会撤销当前 bearer token 的 `jti` 直到原 token 过期，前端随后清理本地 session。
 
 ## 22.2 版本化 API 前缀契约
 
@@ -2223,10 +2247,15 @@ OpenAPI path: /ideas
 - `PATCH /users/{user_id}/active` 使用 query 参数 `is_active`，返回 `ApiMessage`。
 - `POST /api-keys` 和 `POST /api-keys/{api_key_id}/rotate` 返回 `{ api_key, secret }`，secret 只展示一次。
 - `PATCH /api-keys/{api_key_id}` 返回 `ApiMessage`，前端应本地合并 name/is_active/scopes 或重新拉取列表。
+- `/auth/login` 和 `/auth/callback` 必须声明 response model，OpenAPI 需要持续暴露前端依赖的 `LoginResponse` / `CallbackResponse` 字段。
 - external link 的 `entity_type` 只允许单数：`idea`、`project`、`task`。
+- idea external link 的创建和删除必须遵守 idea owner/admin 写权限；project/task external link 继续走 project access 规则。
+- `GanttRead.tasks` 必须与后端 `TaskRead[]` 对齐，不能在前端维护字段更少的影子类型。
 - `TaskDependencyCreate.dependency_type` 第一版只允许 `finish_to_start`。
 - `IdeaCreate` 当前后端接收 `tag_names`；如果产品希望用 `tag_ids` 创建 idea，需要先变更后端 schema 和 OpenAPI。
-- 所有列表型 GET API 统一返回 `PageResponse<T>`：`{ data: T[], total: number }`；前端页面只读取 `response.data.data` 渲染当前页，用 `response.data.total` 驱动 Vuetify `v-pagination`。
+- 所有列表型 GET API 统一返回 `PageResponse<T>`：`{ data: T[], total: number }`；前端页面只读取 `response.data.data` 渲染当前页，用 `response.data.total` 驱动 Vuetify `v-pagination`。分页控件统一由 `PaginationControls` 封装 Vuetify `v-pagination`，居中展示并使用方形分页按钮。
+- Dashboard 这类聚合视图不得把单个分页响应当作全量数据；需要沿 `offset/limit` 拉取所需页或改用专门聚合 API，避免统计被默认第一页截断。
+- 后端测试会读取 `apps/frontend/src/types/api.ts`，将关键 read/write DTO 的字段集合和 nullability 与 OpenAPI schema 比对，避免手写 TypeScript 类型静默漂移。
 
 ## 22.4 当前端点测试覆盖
 
@@ -2238,8 +2267,13 @@ OpenAPI path: /ideas
 | -------- | -------- |
 | `tests/test_app.py` | `/health`、OpenAPI smoke、后端无 `/api/v1` 前缀 |
 | `tests/test_config.py` | YAML 配置解析、非法数据库 URL 拒绝 |
-| `tests/test_openapi_contract.py` | 前端依赖的 schema 字段、Gantt bulk status、link preview shape |
-| `tests/test_api_endpoints.py` | users RBAC、idea/tag/status/history、project/task/gantt/dependency/activity、external links、API key 管理和签名边界 |
+| `tests/test_openapi_contract.py` | 前端依赖的 schema 字段、auth response shape、分页 Page shape、GanttRead 嵌套 TaskRead、Gantt bulk status、link preview shape、前端 API modules 使用的 method/path/status/schema 与 OpenAPI 对齐 |
+| `tests/test_frontend_type_contract.py` | OpenAPI read/write schema 与前端手写 TypeScript interface 的字段/nullability 漂移检查 |
+| `tests/test_api_endpoints.py` | users RBAC、auth state/JWT exp/jti/logout revocation、idea/tag/status/history、project/task/gantt/dependency/activity 过滤、Audit Log 权限与筛选、成员管理、project/task/idea external links 权限、API key 管理和签名边界、API key 审计过滤，以及所有列表型端点的 `{ data, total }` 与关键 offset/limit 行为 |
+| `src/pages/__tests__/AuditLogsPage.spec.ts` | Audit Logs 筛选参数、清空筛选和分页参数对接 |
+| `src/components/__tests__/GanttBoard.spec.ts` | GanttBoard 默认 week、compact month、day/week/month 视图切换 |
+| `src/pages/__tests__/ProjectDetailPage.spec.ts` | Project Detail 任务 drawer、成员添加、idea link/unlink、external link create/delete、分页、Gantt refresh/error、任务保存异常态、administrator/project member/read-only 权限态的前端交互与 API 调用 |
+| `src/stores/__tests__/auth.spec.ts` | 登录 callback state 本地比对、成功换 token 后清理临时 state、logout 清理本地 session |
 
 测试必须继续覆盖以下边界：
 
@@ -2252,30 +2286,31 @@ OpenAPI path: /ideas
 - API Key scope 只能是 `ideas:read` 和 `ideas:write`。
 - API Key 只能访问 idea/tag 相关读写，不得访问 projects/tasks/users/gantt。
 - API Key 创建和轮换后，返回给用户的 secret 不得原样写入数据库，落库值必须是受保护密文。
+- OIDC callback 必须拒绝非法/过期 state，session JWT 必须包含 `exp/jti`，过期或已 logout revocation 的 bearer token 必须被拒绝。
 - Activity/Audit 写入 JSON 字段前必须进行 JSON-safe 编码，避免 date/enum 无法序列化。
 - 所有列表型 GET 端点必须通过契约测试断言同时暴露 `offset` / `limit` query 参数，并返回 `{ data, total }` Page 响应。
+- 前端交互自动化测试已接入 Vitest / Vue Test Utils；Project Detail 已覆盖 tabs 内核心操作、解除关联、删除外链、分页控件、Gantt 刷新联动和基础异常态，后续继续补更完整的权限态 UI。
 
 ## 22.5 当前已知偏差与待补项
 
 以下项目尚未达到最终设计，需要后续补齐：
 
-- OIDC callback 当前未校验前端持有的 state，JWT 当前未包含 `exp`。
-- Audit Log 查询 API 和前端页面已落地，后续需要继续补过滤条件、权限边界和端点测试覆盖。
-- 非 Docker 部署仍缺独立文档，需要补 systemd、nginx、PostgreSQL、配置路径和 migration 流程。
-- Project Detail 已有 tabs，但成员管理、关联 idea 管理、external link 创建/删除、任务详情 drawer 仍需完善。
-- Gantt UI 已支持核心拖动和依赖操作，但 day/week/month 三档视图和任务详情 drawer 仍需补全。
+- Audit Log 查询 API 和前端页面已覆盖核心筛选、权限边界与测试；后续重点是更细的展示格式和导出能力。
+- 非 Docker 部署已有独立文档 `docs/deployment.md`，覆盖 systemd、nginx、PostgreSQL、配置路径、migration 和发布检查；后续可按真实域名、TLS 和运维平台补环境专属手册。
+- Project Detail 可操作 UI 已覆盖成员管理、linked ideas、external links、任务详情 drawer、权限态 UI 和分页列表，并已有较完整前端交互测试；后续重点是更细的表单异常态和 version conflict 体验。
+- Gantt UI 已支持核心拖动、依赖操作和 day/week/month 三档视图；后续需要继续打磨大数据量性能和细粒度异常态。
 - Dashboard 当前按项目逐个拉 tasks/activity，项目多时需要后端聚合端点或分页策略。
-- OpenAPI 到 TypeScript 的自动生成链路尚未建立，当前仍依赖手写 `apps/frontend/src/types/api.ts` 和契约测试保护。
+- OpenAPI 到 TypeScript 的自动生成链路尚未建立；当前已用契约测试保护手写 `apps/frontend/src/types/api.ts` 的关键 read DTO 字段和 nullability，后续可升级为生成式类型链路。
 
 ## 22.6 后续优先级
 
 下一阶段建议按以下顺序推进：
 
-1. 继续收紧 Audit Log 过滤条件、权限边界和审计查询体验。
-2. 建立 OpenAPI -> TypeScript 生成或契约比对脚本，减少前后端类型漂移。
-3. 补 Project Detail 的成员、linked ideas、external links 可操作 UI。
-4. 补 OIDC state 校验、JWT 过期时间和 logout/session 语义。
-5. 补非 Docker 部署文档。
+1. 补更完整的前端认证异常态体验。
+2. 将 OpenAPI -> TypeScript 契约测试升级为生成式类型链路。
+3. 打磨 Audit Log 展示格式和导出能力。
+4. 视数据量增加，为 Dashboard 增加后端聚合端点，替代前端逐页聚合。
+5. 按真实部署环境补 TLS、备份、日志采集和监控手册。
 
 ------
 

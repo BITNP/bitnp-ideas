@@ -4,9 +4,9 @@ import { GanttChart, TaskListColumn } from 'jordium-gantt-vue3'
 import type { Task as JordiumTask } from 'jordium-gantt-vue3'
 
 import { ganttApi } from '@/api/modules'
-import type { GanttDependency, GanttTask, TaskRead } from '@/types/api'
+import type { GanttDependency, TaskRead } from '@/types/api'
 
-type BoardTask = (GanttTask | TaskRead) & {
+type BoardTask = TaskRead & {
   project_id?: string
 }
 
@@ -51,6 +51,12 @@ const emit = defineEmits<{
 }>()
 
 const saving = ref(false)
+const selectedScale = ref<'day' | 'week' | 'month'>(props.compact ? 'month' : 'week')
+const scaleOptions = [
+  { label: 'Day', value: 'day' },
+  { label: 'Week', value: 'week' },
+  { label: 'Month', value: 'month' },
+]
 
 const idMaps = computed(() => {
   const uuidToGanttId = new Map<string, number>()
@@ -252,6 +258,23 @@ function handleSuccessorAdded(event: LinkAddedEvent) {
   <v-card border flat class="gantt-card">
     <v-card-title class="toolbar-row">
       <span>{{ compact ? 'Plan snapshot' : 'Project plan' }}</span>
+      <v-btn-toggle
+        v-if="!compact"
+        v-model="selectedScale"
+        mandatory
+        density="compact"
+        variant="outlined"
+        divided
+      >
+        <v-btn
+          v-for="option in scaleOptions"
+          :key="option.value"
+          :value="option.value"
+          size="small"
+        >
+          {{ option.label }}
+        </v-btn>
+      </v-btn-toggle>
       <v-chip v-if="saving" color="primary" size="small" variant="tonal">Saving</v-chip>
     </v-card-title>
     <v-divider />
@@ -270,7 +293,7 @@ function handleSuccessorAdded(event: LinkAddedEvent) {
         :assignee-options="assigneeOptions"
         :locale="'en-US'"
         :theme="'light'"
-        :time-scale="compact ? 'month' : 'week'"
+        :time-scale="selectedScale"
         :row-height="44"
         task-list-column-render-mode="declarative"
         @task-updated="handleTaskUpdated"
