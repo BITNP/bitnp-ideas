@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { VDateInput } from 'vuetify/components/VDateInput'
 
 import { auditApi } from '@/api/modules'
+import EmptyState from '@/components/EmptyState.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 import type { AuditLogRead } from '@/types/api'
 
@@ -33,13 +34,13 @@ const activeFilterCount = computed(() => [
   createdToFilter.value,
 ].filter(Boolean).length)
 
-const selectedPayload = computed(() => {
-  if (!selectedLog.value) return ''
-  return JSON.stringify({
-    before: selectedLog.value.before,
-    after: selectedLog.value.after,
-    metadata: selectedLog.value.metadata,
-  }, null, 2)
+const selectedPayloadSections = computed(() => {
+  if (!selectedLog.value) return []
+  return [
+    { title: 'Before', value: selectedLog.value.before },
+    { title: 'After', value: selectedLog.value.after },
+    { title: 'Metadata', value: selectedLog.value.metadata },
+  ]
 })
 
 function dateToString(value: Date | null) {
@@ -48,6 +49,21 @@ function dateToString(value: Date | null) {
   const month = String(value.getMonth() + 1).padStart(2, '0')
   const day = String(value.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString()
+}
+
+function formatJson(value: Record<string, unknown> | null) {
+  if (!value || Object.keys(value).length === 0) return 'No data recorded.'
+  return JSON.stringify(value, null, 2)
+}
+
+function actorLabel(log: AuditLogRead) {
+  if (log.actor_user_id) return log.actor_user_id
+  if (log.actor_api_key_id) return `API key ${log.actor_api_key_id}`
+  return 'System'
 }
 
 async function fetchLogs(offset = pageOffset.value, limit = pageLimit.value) {
@@ -208,14 +224,22 @@ onMounted(fetchLogs)
               </v-chip>
               <span v-else class="text-medium-emphasis">System</span>
             </td>
-            <td>{{ new Date(log.created_at).toLocaleString() }}</td>
+            <td>{{ formatDateTime(log.created_at) }}</td>
             <td class="text-right">
-              <v-btn size="small" variant="text" color="primary" @click="openLog(log)">View</v-btn>
+              <v-btn size="small" variant="text" color="primary" @click="openLog(log)">Review</v-btn>
             </td>
           </tr>
           <tr v-if="!loading && logs.length === 0">
             <td colspan="5">
-              <div class="text-center text-medium-emphasis py-6">No audit logs match the filters.</div>
+              <EmptyState
+                icon="$activity"
+                :title="activeFilterCount > 0 ? 'No audit logs match the filters' : 'No audit logs yet'"
+                :description="activeFilterCount > 0
+                  ? 'Clear or adjust filters to inspect a broader event history.'
+                  : 'Immutable system events will appear here after users, projects, tasks, or API keys change.'"
+                :action-label="activeFilterCount > 0 ? 'Clear filters' : undefined"
+                @action="clearFilters"
+              />
             </td>
           </tr>
         </tbody>
@@ -230,7 +254,7 @@ onMounted(fetchLogs)
       @page-change="handlePageChange"
     />
 
-    <v-dialog :model-value="!!selectedLog" max-width="720" @update:model-value="selectedLog = null">
+    <v-dialog :model-value="!!selectedLog" max-width="880" @update:model-value="selectedLog = null">
       <v-card v-if="selectedLog">
         <v-card-title class="d-flex align-center">
           <span>{{ selectedLog.action }}</span>
@@ -238,18 +262,27 @@ onMounted(fetchLogs)
           <v-btn icon="$close" variant="text" @click="selectedLog = null" />
         </v-card-title>
         <v-card-text>
-          <div class="d-flex flex-wrap ga-2 mb-4">
-            <v-chip size="small" color="primary" variant="tonal">{{ selectedLog.entity_type }}</v-chip>
-            <v-chip size="small" variant="tonal">{{ selectedLog.entity_id ?? 'system' }}</v-chip>
-            <v-chip size="small" variant="tonal">{{ new Date(selectedLog.created_at).toLocaleString() }}</v-chip>
+          <div class="audit-summary-grid mb-4">
+            <div>
+              <div class="text-caption text-medium-emphasis">Entity</div>
+              <div class="font-weight-medium">{{ selectedLog.entity_type }}</div>
+              <div class="text-caption text-medium-emphasis">{{ selectedLog.entity_id ?? 'system' }}</div>
+            </div>
+            <div>
+              <div class="text-caption text-medium-emphasis">Actor</div>
+              <div class="font-weight-medium">{{ actorLabel(selectedLog) }}</div>
+            </div>
+            <div>
+              <div class="text-caption text-medium-emphasis">Created</div>
+              <div class="font-weight-medium">{{ formatDateTime(selectedLog.created_at) }}</div>
+            </div>
           </div>
-          <v-textarea
-            :model-value="selectedPayload"
-            label="Payload"
-            rows="14"
-            readonly
-            auto-grow
-          />
+          <div class="audit-detail-sections">
+            <section v-for="section in selectedPayloadSections" :key="section.title" class="audit-detail-section">
+              <div class="text-subtitle-2 mb-2">{{ section.title }}</div>
+              <pre>{{ formatJson(section.value) }}</pre>
+            </section>
+          </div>
         </v-card-text>
       </v-card>
     </v-dialog>
@@ -269,5 +302,37 @@ onMounted(fetchLogs)
   gap: 8px;
   align-items: center;
   min-height: 40px;
+}
+
+.audit-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.audit-detail-sections {
+  display: grid;
+  gap: 12px;
+}
+
+.audit-detail-section {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.audit-detail-section pre {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .audit-summary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

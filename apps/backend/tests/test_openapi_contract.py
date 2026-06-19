@@ -43,7 +43,7 @@ def test_frontend_read_models_expose_timestamps() -> None:
         "IdeaTagRead": {"created_at"},
         "ProjectRead": {"created_at", "updated_at"},
         "TaskRead": {"created_at", "updated_at"},
-        "ApiKeyRead": {"created_at"},
+        "ApiKeyRead": {"created_at", "revoked_at"},
         "AuditLogRead": {"actor_user_id", "actor_api_key_id", "metadata", "created_at"},
         "ExternalLinkRead": {"created_at", "description", "image_url", "site_name"},
     }

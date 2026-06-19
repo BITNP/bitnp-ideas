@@ -48,6 +48,14 @@ def read_api_key(api_key: ApiKey) -> ApiKeyRead:
     return ApiKeyRead.model_validate(api_key)
 
 
+def ensure_api_key_not_revoked(api_key: ApiKey) -> None:
+    if api_key.revoked_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Revoked API keys cannot be changed.",
+        )
+
+
 async def get_owned_api_key(session: AsyncSession, user: CurrentUser, api_key_id: str) -> ApiKey:
     api_key = await session.get(ApiKey, api_key_id)
     if api_key is None:
@@ -114,14 +122,19 @@ async def update_api_key(
     session: DbSessionDep,
 ) -> ApiMessage:
     api_key = await get_owned_api_key(session, user, api_key_id)
+    ensure_api_key_not_revoked(api_key)
     if payload.scopes is not None:
         validate_scopes(payload.scopes)
-    before = {"name": api_key.name, "is_active": api_key.is_active, "scopes": api_key.scopes}
+    before = {
+        "name": api_key.name,
+        "is_active": api_key.is_active,
+        "scopes": api_key.scopes,
+        "revoked_at": api_key.revoked_at.isoformat() if api_key.revoked_at else None,
+    }
     if payload.name is not None:
         api_key.name = payload.name
     if payload.is_active is not None:
         api_key.is_active = payload.is_active
-        api_key.revoked_at = None if payload.is_active else utcnow()
     if payload.scopes is not None:
         api_key.scopes = payload.scopes
     add_audit(
@@ -142,6 +155,10 @@ async def revoke_api_key(
     api_key_id: str, user: CurrentUserDep, session: DbSessionDep
 ) -> ApiMessage:
     api_key = await get_owned_api_key(session, user, api_key_id)
+    if api_key.revoked_at is not None:
+        return ApiMessage(message=f"api key {api_key_id} already revoked")
+
+    before = {"is_active": api_key.is_active, "revoked_at": None}
     api_key.is_active = False
     api_key.revoked_at = utcnow()
     add_audit(
@@ -150,6 +167,11 @@ async def revoke_api_key(
         action="api_key.revoked",
         entity_type="api_key",
         entity_id=api_key.id,
+        before=before,
+        after={
+            "is_active": api_key.is_active,
+            "revoked_at": api_key.revoked_at.isoformat(),
+        },
     )
     await session.commit()
     return ApiMessage(message=f"api key {api_key_id} revoked")
@@ -162,12 +184,11 @@ async def rotate_api_key(
     session: DbSessionDep,
 ) -> ApiKeyCreateResponse:
     api_key = await get_owned_api_key(session, user, api_key_id)
+    ensure_api_key_not_revoked(api_key)
     signing_secret = f"biks_{token_urlsafe(32)}"
     before = {"secret_last4": api_key.secret_last4}
     api_key.secret_hash = protect_signing_secret(signing_secret)
     api_key.secret_last4 = signing_secret[-4:]
-    api_key.is_active = True
-    api_key.revoked_at = None
     add_audit(
         session,
         actor_user_id=user.id,

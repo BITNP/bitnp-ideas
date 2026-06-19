@@ -257,6 +257,7 @@ class ApiKeyRead(BaseModel):
     allowed_entities: list[str]
     is_active: bool
     last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
     created_at: datetime
 
 

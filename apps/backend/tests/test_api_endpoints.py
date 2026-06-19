@@ -820,6 +820,7 @@ def test_api_keys_management_and_signed_idea_only_access(api_context) -> None:
     secret = created["secret"]
     assert secret.endswith(api_key["secret_last4"])
     assert api_key["allowed_entities"] == ["idea"]
+    assert api_key["revoked_at"] is None
     stored_secret = api_context.run(stored_api_key_secret(api_context, api_key["id"]))
     assert stored_secret != secret
     assert stored_secret.startswith(PROTECTED_SECRET_PREFIX)
@@ -866,6 +867,39 @@ def test_api_keys_management_and_signed_idea_only_access(api_context) -> None:
     )
     assert rejected_scope.status_code == 422
 
+    deactivate_response = api_context.client.patch(
+        f"/api-keys/{api_key['id']}",
+        json={"is_active": False},
+    )
+    assert deactivate_response.status_code == 200
+    deactivated_keys = api_context.client.get("/api-keys").json()["data"]
+    deactivated_key = next(key for key in deactivated_keys if key["id"] == api_key["id"])
+    assert deactivated_key["is_active"] is False
+    assert deactivated_key["revoked_at"] is None
+
+    api_context.use_real_auth()
+    paused_key_request = api_context.client.get(
+        "/ideas",
+        headers=sign_headers(
+            key_id=api_key["key_id"],
+            secret=secret,
+            method="GET",
+            path="/ideas",
+        ),
+    )
+    api_context.use_stub_auth()
+    assert paused_key_request.status_code == 401
+
+    reactivate_response = api_context.client.patch(
+        f"/api-keys/{api_key['id']}",
+        json={"is_active": True},
+    )
+    assert reactivate_response.status_code == 200
+    reactivated_keys = api_context.client.get("/api-keys").json()["data"]
+    reactivated_key = next(key for key in reactivated_keys if key["id"] == api_key["id"])
+    assert reactivated_key["is_active"] is True
+    assert reactivated_key["revoked_at"] is None
+
     api_context.use_real_auth()
     api_created_idea_body = {"title": "API submitted idea"}
     signed_create_idea = api_context.client.post(
@@ -900,6 +934,22 @@ def test_api_keys_management_and_signed_idea_only_access(api_context) -> None:
         json={"name": "Workflow readonly", "scopes": ["ideas:read"]},
     )
     assert update_response.status_code == 200
+
+    paused_create_response = api_context.client.post("/api-keys", json={"name": "Paused rotate"})
+    assert paused_create_response.status_code == 201
+    paused_key = paused_create_response.json()["api_key"]
+    assert (
+        api_context.client.patch(
+            f"/api-keys/{paused_key['id']}",
+            json={"is_active": False},
+        ).status_code
+        == 200
+    )
+    paused_rotate_response = api_context.client.post(f"/api-keys/{paused_key['id']}/rotate")
+    assert paused_rotate_response.status_code == 200
+    paused_rotated = paused_rotate_response.json()["api_key"]
+    assert paused_rotated["is_active"] is False
+    assert paused_rotated["revoked_at"] is None
 
     rotate_response = api_context.client.post(f"/api-keys/{api_key['id']}/rotate")
     assert rotate_response.status_code == 200
@@ -965,6 +1015,20 @@ def test_api_keys_management_and_signed_idea_only_access(api_context) -> None:
 
     revoke_response = api_context.client.delete(f"/api-keys/{api_key['id']}")
     assert revoke_response.status_code == 200
+    revoked_keys = api_context.client.get("/api-keys").json()["data"]
+    revoked_key = next(key for key in revoked_keys if key["id"] == api_key["id"])
+    assert revoked_key["is_active"] is False
+    assert revoked_key["revoked_at"] is not None
+    assert (
+        api_context.client.patch(
+            f"/api-keys/{api_key['id']}",
+            json={"is_active": True},
+        ).status_code
+        == 409
+    )
+    assert api_context.client.post(f"/api-keys/{api_key['id']}/rotate").status_code == 409
+    second_revoke_response = api_context.client.delete(f"/api-keys/{api_key['id']}")
+    assert second_revoke_response.status_code == 200
 
     api_context.use_real_auth()
     revoked_key_request = api_context.client.get(

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 
 import { ideasApi, tagsApi } from '@/api/modules'
+import EmptyState from '@/components/EmptyState.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 import type { IdeaRead, TagRead } from '@/types/api'
 
@@ -28,6 +29,7 @@ const createTagIds = ref<string[]>([])
 const filteredIdeas = computed(() => ideas.value)
 
 const activeIdea = computed(() => ideas.value.find((idea) => idea.id === activeIdeaId.value))
+const hasActiveFilters = computed(() => Boolean(query.value || selectedStatus.value || selectedTag.value))
 
 async function fetchIdeas(offset = pageOffset.value, limit = pageLimit.value) {
   loading.value = true
@@ -53,6 +55,17 @@ async function fetchIdeas(offset = pageOffset.value, limit = pageLimit.value) {
 
 function handlePageChange(page: { offset: number; limit: number }) {
   fetchIdeas(page.offset, page.limit)
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString()
+}
+
+function clearFilters() {
+  query.value = ''
+  selectedStatus.value = null
+  selectedTag.value = null
+  fetchIdeas(0, pageLimit.value)
 }
 
 onMounted(async () => {
@@ -141,7 +154,7 @@ async function handleCreate() {
         <h1 class="text-h5 mb-1">Ideas</h1>
         <p class="text-body-2 text-medium-emphasis mb-0">Capture, tag, filter, and promote ideas into projects.</p>
       </div>
-      <v-btn color="primary" prepend-icon="$plus" @click="createDialog = true">Create</v-btn>
+      <v-btn color="primary" prepend-icon="$plus" @click="createDialog = true">Create idea</v-btn>
     </div>
 
     <v-card border flat class="mb-4">
@@ -173,7 +186,7 @@ async function handleCreate() {
         <v-card border flat @click="openIdea(idea.id)">
           <v-card-title class="text-subtitle-1">{{ idea.title }}</v-card-title>
           <v-card-text>
-            <p class="text-body-2 text-medium-emphasis">{{ idea.description }}</p>
+            <p class="text-body-2 text-medium-emphasis">{{ idea.description || 'No description yet.' }}</p>
             <div class="d-flex flex-wrap ga-2">
               <v-chip v-for="tag in idea.tags" :key="tag.id" :color="tag.color ?? undefined" size="small" variant="tonal">
                 {{ tag.name }}
@@ -183,8 +196,21 @@ async function handleCreate() {
           <v-card-actions>
             <v-chip size="small" color="primary" variant="tonal">{{ idea.status }}</v-chip>
             <v-spacer />
-            <span class="text-caption text-medium-emphasis">{{ idea.updated_at }}</span>
+            <span class="text-caption text-medium-emphasis">Updated {{ formatDate(idea.updated_at) }}</span>
           </v-card-actions>
+        </v-card>
+      </v-col>
+      <v-col v-if="!loading && filteredIdeas.length === 0" cols="12">
+        <v-card border flat>
+          <EmptyState
+            icon="$idea"
+            :title="hasActiveFilters ? 'No ideas match the filters' : 'No ideas yet'"
+            :description="hasActiveFilters
+              ? 'Adjust the search, status, or tag filters to widen the list.'
+              : 'Capture the first idea so it can be evaluated, tagged, and promoted into project work.'"
+            :action-label="hasActiveFilters ? 'Clear filters' : 'Create idea'"
+            @action="hasActiveFilters ? clearFilters() : (createDialog = true)"
+          />
         </v-card>
       </v-col>
     </v-row>
@@ -201,7 +227,7 @@ async function handleCreate() {
       <template v-if="activeIdea">
         <v-toolbar flat>
           <v-toolbar-title>Idea detail</v-toolbar-title>
-          <v-btn icon="$delete" variant="text" @click="handleDelete(activeIdea.id)" />
+          <v-btn icon="$delete" variant="text" title="Delete idea" aria-label="Delete idea" @click="handleDelete(activeIdea.id)" />
           <v-btn icon="$close" variant="text" @click="drawer = false" />
         </v-toolbar>
         <div class="pa-4">
@@ -226,7 +252,7 @@ async function handleCreate() {
     </v-navigation-drawer>
 
     <v-dialog v-model="createDialog" max-width="520">
-      <v-card title="Create Idea">
+      <v-card title="Create idea">
         <v-card-text>
           <v-text-field v-model="createTitle" label="Title" />
           <v-textarea v-model="createDescription" label="Description" rows="3" />
@@ -248,7 +274,7 @@ async function handleCreate() {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="createDialog = false">Cancel</v-btn>
-          <v-btn color="primary" variant="tonal" :disabled="!createTitle" @click="handleCreate">Create</v-btn>
+          <v-btn color="primary" variant="tonal" :disabled="!createTitle" @click="handleCreate">Create idea</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

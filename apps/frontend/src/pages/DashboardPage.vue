@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import MetricTile from '@/components/MetricTile.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { activityApi, ideasApi, projectsApi, tasksApi } from '@/api/modules'
 import type { ActivityRead, IdeaRead, ProjectRead, TaskRead } from '@/types/api'
 
@@ -23,6 +24,7 @@ const activeIdeas = computed(() => ideas.value.filter((i) => i.status === 'activ
 const activeProjects = computed(() => projects.value.filter((p) => p.status === 'active').length)
 const openTasks = computed(() => allTasks.value.filter((t) => t.status !== 'done').length)
 const totalIdeas = computed(() => ideas.value.length)
+const hasWork = computed(() => ideas.value.length > 0 || projects.value.length > 0)
 
 const projectNameMap = computed(() => {
   const map: Record<string, string> = {}
@@ -137,7 +139,7 @@ onMounted(async () => {
           Idea intake, project delivery, and traceable execution.
         </p>
       </div>
-      <v-btn color="primary" prepend-icon="$plus" to="/ideas">New idea</v-btn>
+      <v-btn color="primary" prepend-icon="$plus" to="/ideas">Create idea</v-btn>
     </div>
 
     <div class="metric-grid mb-4">
@@ -148,7 +150,16 @@ onMounted(async () => {
     </div>
 
     <div class="content-grid">
-      <GanttBoard :tasks="allTasks" compact readonly />
+      <v-card v-if="!hasWork && !loading" border flat>
+        <EmptyState
+          icon="$idea"
+          title="Start with an idea"
+          description="Capture a first idea, then promote it into project work when it is ready to execute."
+          action-label="Create idea"
+          @action="$router.push('/ideas')"
+        />
+      </v-card>
+      <GanttBoard v-else :tasks="allTasks" compact readonly />
 
       <v-card border flat>
         <v-card-title>Recent activity</v-card-title>
@@ -161,9 +172,12 @@ onMounted(async () => {
             :prepend-icon="item.icon"
           />
         </v-list>
-        <v-card-text v-else class="text-medium-emphasis">
-          No recent activity.
-        </v-card-text>
+        <EmptyState
+          v-else
+          icon="$activity"
+          title="No activity yet"
+          description="Project updates, task changes, and API key events will appear here once work starts moving."
+        />
       </v-card>
     </div>
   </div>

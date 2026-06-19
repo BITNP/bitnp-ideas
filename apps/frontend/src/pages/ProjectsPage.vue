@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { projectsApi } from '@/api/modules'
+import EmptyState from '@/components/EmptyState.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 import type { ProjectRead } from '@/types/api'
 
+const router = useRouter()
 const projects = ref<ProjectRead[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -39,6 +42,27 @@ async function fetchProjects(offset = pageOffset.value, limit = pageLimit.value)
 
 function handlePageChange(page: { offset: number; limit: number }) {
   fetchProjects(page.offset, page.limit)
+}
+
+function openProject(project: ProjectRead) {
+  router.push(`/projects/${project.id}`)
+}
+
+function statusColor(status: string) {
+  if (status === 'active') return 'success'
+  if (status === 'paused') return 'warning'
+  if (status === 'completed') return 'primary'
+  if (status === 'cancelled') return 'error'
+  return 'secondary'
+}
+
+function memberSummary(project: ProjectRead) {
+  if (project.members.length === 0) return 'No members'
+  return project.members.map((m) => m.name).join(', ')
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString()
 }
 
 async function createProject() {
@@ -85,19 +109,39 @@ onMounted(() => {
             <th>Status</th>
             <th>Progress</th>
             <th>Members</th>
+            <th>Updated</th>
+            <th class="text-right">Action</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="project in projects" :key="project.id">
+          <tr v-for="project in projects" :key="project.id" class="interactive-row" @click="openProject(project)">
             <td>
-              <v-btn variant="plain" density="compact" class="pa-0 text-none" :to="`/projects/${project.id}`">{{ project.key }}</v-btn>
+              <v-chip size="small" color="primary" variant="tonal">{{ project.key }}</v-chip>
             </td>
-            <td>{{ project.name }}</td>
-            <td><v-chip size="small" color="secondary" variant="tonal">{{ project.status }}</v-chip></td>
+            <td>
+              <div class="font-weight-medium">{{ project.name }}</div>
+              <div class="text-caption text-medium-emphasis">{{ project.description || 'No description yet.' }}</div>
+            </td>
+            <td><v-chip size="small" :color="statusColor(project.status)" variant="tonal">{{ project.status }}</v-chip></td>
             <td>
               <v-progress-linear :model-value="project.progress" color="primary" height="8" rounded />
             </td>
-            <td>{{ project.members.map(m => m.name).join(', ') }}</td>
+            <td>{{ memberSummary(project) }}</td>
+            <td class="nowrap-cell">{{ formatDate(project.updated_at) }}</td>
+            <td class="text-right">
+              <v-btn size="small" variant="text" color="primary" @click.stop="openProject(project)">Open</v-btn>
+            </td>
+          </tr>
+          <tr v-if="!loading && projects.length === 0">
+            <td colspan="7">
+              <EmptyState
+                icon="$gantt"
+                title="No projects yet"
+                description="Create a project when an idea is ready for members, tasks, links, and activity tracking."
+                action-label="Create project"
+                @action="dialog = true"
+              />
+            </td>
           </tr>
         </tbody>
       </v-table>
@@ -115,7 +159,7 @@ onMounted(() => {
       <v-card border flat>
         <v-card-title>Create project</v-card-title>
         <v-card-text>
-          <v-text-field v-model="form.key" label="Key" required />
+          <v-text-field v-model="form.key" label="Key" hint="Short identifier, e.g. EXEC" persistent-hint required />
           <v-text-field v-model="form.name" label="Name" required />
           <v-textarea v-model="form.description" label="Description" rows="3" />
           <v-select
@@ -127,7 +171,7 @@ onMounted(() => {
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="dialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="submitting" @click="createProject">Create</v-btn>
+          <v-btn color="primary" :loading="submitting" :disabled="!form.key || !form.name" @click="createProject">Create project</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

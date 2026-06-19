@@ -152,6 +152,7 @@ api_keys = [
         scopes=["ideas:read", "ideas:write"],
         allowed_entities=["idea"],
         is_active=True,
+        revoked_at=None,
     )
 ]
 
