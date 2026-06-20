@@ -3,6 +3,7 @@ import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { VDateInput } from 'vuetify/components/VDateInput'
 
+import EmptyState from '@/components/EmptyState.vue'
 import MetricTile from '@/components/MetricTile.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 import { projectsApi, tasksApi, ganttApi, activityApi, linksApi, usersApi, ideasApi } from '@/api/modules'
@@ -584,11 +585,19 @@ function handleGanttError(message: string) {
             :dependencies="ganttData.dependencies ?? []"
             :project-id="projectId"
             :readonly="!canEditProjectWork"
+            :show-create-task-action="canEditProjectWork"
             @refresh="fetchGantt"
             @error="handleGanttError"
+            @create-task="addTaskDialog = true"
           />
           <v-card v-else border flat>
-            <v-card-text class="text-medium-emphasis">No gantt data available.</v-card-text>
+            <EmptyState
+              icon="$gantt"
+              title="Plan data is unavailable"
+              description="Refresh the project plan or add a task to start rebuilding the timeline."
+              :action-label="canEditProjectWork ? 'Add task' : undefined"
+              @action="addTaskDialog = true"
+            />
           </v-card>
         </v-window-item>
 

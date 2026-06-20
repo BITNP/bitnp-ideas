@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 
+import EmptyState from '../EmptyState.vue'
 import GanttBoard from '../GanttBoard.vue'
 
 vi.mock('@/api/modules', () => ({
@@ -43,6 +44,12 @@ const passthroughStub = defineComponent({
   template: '<div><slot /></div>',
 })
 
+const buttonStub = defineComponent({
+  props: ['value'],
+  emits: ['click'],
+  template: '<button :data-value="value" @click="$emit(\'click\', $event)"><slot /></button>',
+})
+
 const buttonToggleStub = defineComponent({
   props: ['modelValue'],
   emits: ['update:modelValue'],
@@ -59,26 +66,24 @@ function mountBoard(props = {}) {
     },
     global: {
       stubs: {
-        VBtn: defineComponent({
-          props: ['value'],
-          template: '<button :data-value="value"><slot /></button>',
-        }),
+        VAvatar: passthroughStub,
+        VBtn: buttonStub,
         VBtnToggle: buttonToggleStub,
         VCard: passthroughStub,
         VCardText: passthroughStub,
         VCardTitle: passthroughStub,
         VChip: passthroughStub,
         VDivider: passthroughStub,
-        'v-btn': defineComponent({
-          props: ['value'],
-          template: '<button :data-value="value"><slot /></button>',
-        }),
+        VIcon: passthroughStub,
+        'v-avatar': passthroughStub,
+        'v-btn': buttonStub,
         'v-btn-toggle': buttonToggleStub,
         'v-card': passthroughStub,
         'v-card-text': passthroughStub,
         'v-card-title': passthroughStub,
         'v-chip': passthroughStub,
         'v-divider': passthroughStub,
+        'v-icon': passthroughStub,
       },
     },
   })
@@ -100,5 +105,35 @@ describe('GanttBoard', () => {
 
     expect(wrapper.find('[data-test="gantt-chart"]').attributes('data-scale')).toBe('month')
     expect(wrapper.find('[data-test="scale-toggle"]').exists()).toBe(false)
+  })
+
+  it('summarizes plan health above the chart', () => {
+    const wrapper = mountBoard({
+      dependencies: [{
+        id: 'dependency-1',
+        predecessor_task_id: 'task-1',
+        successor_task_id: 'task-2',
+        dependency_type: 'finish_to_start',
+      }],
+    })
+
+    const summaryText = wrapper.find('[data-test="gantt-summary"]').text()
+    expect(summaryText).toContain('Tasks 1')
+    expect(summaryText).toContain('Scheduled 1')
+    expect(summaryText).toContain('Dependencies 1')
+  })
+
+  it('offers task creation from the empty editable plan state', async () => {
+    const wrapper = mountBoard({
+      tasks: [],
+      showCreateTaskAction: true,
+    })
+
+    expect(wrapper.text()).toContain('No scheduled tasks yet')
+
+    wrapper.findComponent(EmptyState).vm.$emit('action')
+
+    const emitted = wrapper.emitted('createTask') ?? wrapper.emitted('create-task')
+    expect(emitted).toHaveLength(1)
   })
 })
